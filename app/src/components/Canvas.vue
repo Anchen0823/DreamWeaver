@@ -348,10 +348,11 @@ const getShapeStyle = (element: ShapeElement): Record<string, string | number> =
       width: '0',
       height: '0',
       backgroundColor: 'transparent',
+      border: 'none',
       borderLeft: `${element.width / 2}px solid transparent`,
       borderRight: `${element.width / 2}px solid transparent`,
       borderBottom: `${element.height}px solid ${element.backgroundColor}`,
-      borderTop: '0 solid transparent'
+      borderTopWidth: '0'
     }
   }
 
@@ -387,11 +388,6 @@ const getImageStyle = (element: ImageElement): Record<string, string | number> =
 // 获取文本元素的样式
 const getTextStyle = (element: TextElement): Record<string, string | number> => {
   return {
-    position: 'absolute',
-    left: '0',
-    top: '0',
-    width: '100%',
-    height: '100%',
     fontFamily: element.fontFamily,
     fontSize: element.fontSize + 'px',
     color: element.color,
@@ -414,10 +410,10 @@ const getTextStyle = (element: TextElement): Record<string, string | number> => 
 // 格式化文本内容（处理换行等）
 const formatTextContent = (element: TextElement): string => {
   return element.content
-    .replace(/&/g, '&amp;')  // 必须先转义 &，因为其他转义会用到 &
-    .replace(/</g, '&lt;')   // 转义 <
-    .replace(/>/g, '&gt;')   // 转义 >
-    .replace(/\n/g, '<br>')  // 最后将换行符转换为 <br> 标签
+    .replace(/\n/g, '<br>')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
 }
 
 // 统一获取元素样式的方法
