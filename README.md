@@ -32,9 +32,28 @@ A canvas app for ByteDance campus
     npm run dev
     ```
 
-5.  在浏览器中打开 [待补充] (或提示的地址)。
+5.  在浏览器中打开 [[待补充](http://localhost:5173/)] (或提示的地址)。
 
 ## 3. 主要目录结构说明
+
+```
+DreamWeaver/
+├── app/                    # 主应用目录
+│   ├── src/
+│   │   ├── components/     # Vue 组件
+│   │   │   └── Canvas.vue  # 画布组件
+│   │   ├── stores/         # Pinia 状态管理（待实现）
+│   │   ├── types/          # TypeScript 类型定义（待实现）
+│   │   ├── App.vue         # 根组件
+│   │   └── main.ts         # 入口文件
+│   ├── public/             # 静态资源
+│   └── package.json        # 项目配置
+├── docs/                   # 文档目录
+│   └── DATA_STRUCTURE.md   # 数据结构设计文档
+└── README.md               # 项目说明
+```
+
+
 
 
 ## 4. 已实现功能列表
