@@ -403,7 +403,9 @@ const getTextStyle = (element: TextElement): Record<string, string | number> => 
     padding: '4px',
     boxSizing: 'border-box',
     wordWrap: 'break-word',
-    overflow: 'hidden'
+    width: '100%',
+    minHeight: '100%',
+    height: 'auto'  // 自动高度以适应内容
   }
 }
 
@@ -416,6 +418,17 @@ const formatTextContent = (element: TextElement): string => {
     .replace(/\n/g, '<br>')   // 最后将换行符转换为 <br> 标签
 }
 
+// 获取文本元素容器的样式（允许高度自动适应）
+const getTextElementStyle = (element: TextElement): Record<string, string | number> => {
+  const baseStyle = getBaseStyle(element)
+  // 文本元素使用 min-height 而不是固定 height，允许自动扩展
+  return {
+    ...baseStyle,
+    height: 'auto',
+    minHeight: element.height + 'px'
+  }
+}
+
 // 统一获取元素样式的方法
 const getElementStyle = (element: CanvasElement): Record<string, string | number> => {
   if (element.type === 'rectangle' || 
@@ -425,8 +438,12 @@ const getElementStyle = (element: CanvasElement): Record<string, string | number
     return getShapeStyle(element as ShapeElement)
   }
   
-  if (element.type === 'image' || element.type === 'text') {
+  if (element.type === 'image') {
     return getBaseStyle(element)
+  }
+  
+  if (element.type === 'text') {
+    return getTextElementStyle(element as TextElement)
   }
   
   return getBaseStyle(element)
