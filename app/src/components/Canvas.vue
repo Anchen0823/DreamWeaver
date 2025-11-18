@@ -1,36 +1,51 @@
 <template>
   <div class="canvas" :style="{ width: canvasWidth + 'px', height: canvasHeight + 'px' }">
     <div
-      v-for="shape in shapes"
-      :key="shape.id"
-      :class="['shape', shape.type]"
-      :style="getShapeStyle(shape)"
+      v-for="element in elements"
+      :key="element.id"
+      :class="['element', element.type]"
+      :style="getElementStyle(element)"
     >
-      <!-- 形状内容 -->
+      <!-- 图形元素 -->
+      <template v-if="element.type === 'rectangle' || element.type === 'rounded-rectangle' || element.type === 'circle' || element.type === 'triangle'">
+        <!-- 图形通过CSS样式渲染，无需内容 -->
+      </template>
+      
+      <!-- 图片元素 -->
+      <template v-else-if="element.type === 'image'">
+        <img
+          :src="element.src"
+          :alt="element.id"
+          :style="getImageStyle(element)"
+          class="image-content"
+        />
+      </template>
+      
+      <!-- 文本元素 -->
+      <template v-else-if="element.type === 'text'">
+        <div
+          :style="getTextStyle(element)"
+          class="text-content"
+          v-html="formatTextContent(element)"
+        ></div>
+      </template>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref } from 'vue'
-
-export interface Shape {
-  id: string
-  type: 'rectangle' | 'rounded-rectangle' | 'circle' | 'triangle'
-  x: number
-  y: number
-  width: number
-  height: number
-  backgroundColor: string
-  borderWidth: number
-  borderColor: string
-  borderRadius?: number // 仅圆角矩形使用
-}
+import type {
+  CanvasElement,
+  ShapeElement,
+  ImageElement,
+  TextElement
+} from '../types/canvas'
 
 const canvasWidth = ref(800)
-const canvasHeight = ref(600)
+const canvasHeight = ref(550)
 
-const shapes = ref<Shape[]>([
+const elements = ref<CanvasElement[]>([
   {
     id: 'rect1',
     type: 'rectangle',
@@ -75,52 +90,350 @@ const shapes = ref<Shape[]>([
     backgroundColor: '#96ceb4',
     borderWidth: 2,
     borderColor: '#88c5a8'
+  },
+  {
+    id: 'image1',
+    type: 'image',
+    x: 50,
+    y: 200,
+    width: 150,
+    height: 100,
+    src: '/test1.jpg',
+    originalWidth: 150,
+    originalHeight: 100,
+    filter: 'none'
+  },
+  {
+    id: 'image2',
+    type: 'image',
+    x: 220,
+    y: 200,
+    width: 150,
+    height: 100,
+    src: '/test1.jpg',
+    originalWidth: 150,
+    originalHeight: 100,
+    filter: 'grayscale',
+    filterIntensity: 100
+  },
+  {
+    id: 'image3',
+    type: 'image',
+    x: 390,
+    y: 200,
+    width: 150,
+    height: 100,
+    src: '/test1.jpg',
+    originalWidth: 150,
+    originalHeight: 100,
+    filter: 'blur',
+    filterIntensity: 3
+  },
+  {
+    id: 'image4',
+    type: 'image',
+    x: 560,
+    y: 200,
+    width: 150,
+    height: 100,
+    src: '/test1.jpg',
+    originalWidth: 150,
+    originalHeight: 100,
+    filter: 'contrast',
+    filterIntensity: 150
+  },
+  {
+    id: 'text1',
+    type: 'text',
+    x: 50,
+    y: 320,
+    width: 200,
+    height: 50,
+    content: 'Bold Text',
+    fontFamily: 'Arial, sans-serif',
+    fontSize: 24,
+    color: '#333333',
+    bold: true,
+    italic: false,
+    underline: false,
+    strikethrough: false,
+    textAlign: 'left',
+    lineHeight: 1.5
+  },
+  {
+    id: 'text2',
+    type: 'text',
+    x: 270,
+    y: 320,
+    width: 200,
+    height: 50,
+    content: 'Italic Text',
+    fontFamily: 'Arial, sans-serif',
+    fontSize: 24,
+    color: '#333333',
+    bold: false,
+    italic: true,
+    underline: false,
+    strikethrough: false,
+    textAlign: 'left',
+    lineHeight: 1.5
+  },
+  {
+    id: 'text3',
+    type: 'text',
+    x: 490,
+    y: 320,
+    width: 200,
+    height: 50,
+    content: 'Underline Text',
+    fontFamily: 'Arial, sans-serif',
+    fontSize: 24,
+    color: '#333333',
+    bold: false,
+    italic: false,
+    underline: true,
+    strikethrough: false,
+    textAlign: 'left',
+    lineHeight: 1.5
+  },
+  {
+    id: 'text4',
+    type: 'text',
+    x: 50,
+    y: 390,
+    width: 200,
+    height: 50,
+    content: 'Strikethrough Text',
+    fontFamily: 'Arial, sans-serif',
+    fontSize: 24,
+    color: '#333333',
+    bold: false,
+    italic: false,
+    underline: false,
+    strikethrough: true,
+    textAlign: 'left',
+    lineHeight: 1.5
+  },
+  {
+    id: 'text5',
+    type: 'text',
+    x: 270,
+    y: 390,
+    width: 200,
+    height: 50,
+    content: 'Bold & Italic',
+    fontFamily: 'Arial, sans-serif',
+    fontSize: 24,
+    color: '#333333',
+    bold: true,
+    italic: true,
+    underline: false,
+    strikethrough: false,
+    textAlign: 'left',
+    lineHeight: 1.5
+  },
+  {
+    id: 'text6',
+    type: 'text',
+    x: 490,
+    y: 390,
+    width: 200,
+    height: 50,
+    content: 'All Styles',
+    fontFamily: 'Arial, sans-serif',
+    fontSize: 24,
+    color: '#333333',
+    bold: true,
+    italic: true,
+    underline: true,
+    strikethrough: true,
+    textAlign: 'left',
+    lineHeight: 1.5
+  },
+  {
+    id: 'text7',
+    type: 'text',
+    x: 50,
+    y: 460,
+    width: 200,
+    height: 50,
+    content: 'Large Font Size',
+    fontFamily: 'Arial, sans-serif',
+    fontSize: 32,
+    color: '#ff6b6b',
+    bold: true,
+    italic: false,
+    underline: false,
+    strikethrough: false,
+    textAlign: 'left',
+    lineHeight: 1.5
+  },
+  {
+    id: 'text8',
+    type: 'text',
+    x: 270,
+    y: 460,
+    width: 200,
+    height: 50,
+    content: 'Center Aligned',
+    fontFamily: 'Arial, sans-serif',
+    fontSize: 24,
+    color: '#4ecdc4',
+    bold: false,
+    italic: false,
+    underline: false,
+    strikethrough: false,
+    textAlign: 'center',
+    lineHeight: 1.5
+  },
+  {
+    id: 'text9',
+    type: 'text',
+    x: 490,
+    y: 460,
+    width: 200,
+    height: 50,
+    content: 'Right Aligned',
+    fontFamily: 'Arial, sans-serif',
+    fontSize: 24,
+    color: '#45b7d1',
+    bold: false,
+    italic: false,
+    underline: false,
+    strikethrough: false,
+    textAlign: 'right',
+    lineHeight: 1.5
   }
 ])
 
-const getShapeStyle = (shape: Shape): Record<string, string | number> => {
-  const baseStyle = {
+// 获取元素的基础样式（位置、尺寸）
+const getBaseStyle = (element: CanvasElement): Record<string, string | number> => {
+  return {
     position: 'absolute',
-    left: shape.x + 'px',
-    top: shape.y + 'px',
-    width: shape.width + 'px',
-    height: shape.height + 'px',
-    backgroundColor: shape.backgroundColor,
-    borderWidth: shape.borderWidth + 'px',
-    borderStyle: 'solid',
-    borderColor: shape.borderColor,
+    left: element.x + 'px',
+    top: element.y + 'px',
+    width: element.width + 'px',
+    height: element.height + 'px',
     boxSizing: 'border-box'
   }
+}
 
-  if (shape.type === 'rounded-rectangle') {
+// 获取图形元素的样式
+const getShapeStyle = (element: ShapeElement): Record<string, string | number> => {
+  const baseStyle = {
+    ...getBaseStyle(element),
+    backgroundColor: element.backgroundColor,
+    borderWidth: element.borderWidth + 'px',
+    borderStyle: 'solid',
+    borderColor: element.borderColor
+  }
+
+  if (element.type === 'rounded-rectangle') {
     return {
       ...baseStyle,
-      borderRadius: (shape.borderRadius || 0) + 'px'
+      borderRadius: (element.borderRadius || 0) + 'px'
     }
   }
 
-  if (shape.type === 'circle') {
+  if (element.type === 'circle') {
     return {
       ...baseStyle,
       borderRadius: '50%'
     }
   }
 
-  if (shape.type === 'triangle') {
+  if (element.type === 'triangle') {
     return {
-      ...baseStyle,
+      ...getBaseStyle(element),
       width: '0',
       height: '0',
       backgroundColor: 'transparent',
-      border: 'none',
-      borderLeft: `${shape.width / 2}px solid transparent`,
-      borderRight: `${shape.width / 2}px solid transparent`,
-      borderBottom: `${shape.height}px solid ${shape.backgroundColor}`,
-      borderTopWidth: '0'
+      borderLeft: `${element.width / 2}px solid transparent`,
+      borderRight: `${element.width / 2}px solid transparent`,
+      borderBottom: `${element.height}px solid ${element.backgroundColor}`,
+      borderTop: '0 solid transparent'
     }
   }
 
   return baseStyle
+}
+
+// 获取图片元素的样式
+const getImageStyle = (element: ImageElement): Record<string, string | number> => {
+  const style: Record<string, string | number> = {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover'
+  }
+
+  // 应用滤镜
+  if (element.filter && element.filter !== 'none') {
+    switch (element.filter) {
+      case 'grayscale':
+        style.filter = `grayscale(${element.filterIntensity || 100}%)`
+        break
+      case 'blur':
+        style.filter = `blur(${element.filterIntensity || 5}px)`
+        break
+      case 'contrast':
+        style.filter = `contrast(${element.filterIntensity || 150}%)`
+        break
+    }
+  }
+
+  return style
+}
+
+// 获取文本元素的样式
+const getTextStyle = (element: TextElement): Record<string, string | number> => {
+  return {
+    position: 'absolute',
+    left: '0',
+    top: '0',
+    width: '100%',
+    height: '100%',
+    fontFamily: element.fontFamily,
+    fontSize: element.fontSize + 'px',
+    color: element.color,
+    backgroundColor: element.backgroundColor || 'transparent',
+    fontWeight: element.bold ? 'bold' : 'normal',
+    fontStyle: element.italic ? 'italic' : 'normal',
+    textDecoration: [
+      element.underline ? 'underline' : '',
+      element.strikethrough ? 'line-through' : ''
+    ].filter(Boolean).join(' ') || 'none',
+    textAlign: element.textAlign || 'left',
+    lineHeight: element.lineHeight || 1.5,
+    padding: '4px',
+    boxSizing: 'border-box',
+    wordWrap: 'break-word',
+    overflow: 'hidden'
+  }
+}
+
+// 格式化文本内容（处理换行等）
+const formatTextContent = (element: TextElement): string => {
+  return element.content
+    .replace(/&/g, '&amp;')  // 必须先转义 &，因为其他转义会用到 &
+    .replace(/</g, '&lt;')   // 转义 <
+    .replace(/>/g, '&gt;')   // 转义 >
+    .replace(/\n/g, '<br>')  // 最后将换行符转换为 <br> 标签
+}
+
+// 统一获取元素样式的方法
+const getElementStyle = (element: CanvasElement): Record<string, string | number> => {
+  if (element.type === 'rectangle' || 
+      element.type === 'rounded-rectangle' || 
+      element.type === 'circle' || 
+      element.type === 'triangle') {
+    return getShapeStyle(element as ShapeElement)
+  }
+  
+  if (element.type === 'image' || element.type === 'text') {
+    return getBaseStyle(element)
+  }
+  
+  return getBaseStyle(element)
 }
 </script>
 
@@ -133,11 +446,21 @@ const getShapeStyle = (shape: Shape): Record<string, string | number> => {
   overflow: hidden;
 }
 
-.shape {
+.element {
   cursor: pointer;
 }
 
-.shape:hover {
-  opacity: 0.8;
+.element:hover {
+  opacity: 0.9;
+}
+
+.image-content {
+  display: block;
+  user-select: none;
+}
+
+.text-content {
+  user-select: text;
+  white-space: pre-wrap;
 }
 </style>
