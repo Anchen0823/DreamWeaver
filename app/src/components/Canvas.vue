@@ -410,10 +410,10 @@ const getTextStyle = (element: TextElement): Record<string, string | number> => 
 // 格式化文本内容（处理换行等）
 const formatTextContent = (element: TextElement): string => {
   return element.content
-    .replace(/\n/g, '<br>')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
+    .replace(/&/g, '&amp;')  // 先转义 &，因为其他转义序列都包含 &
+    .replace(/</g, '&lt;')    // 转义 <
+    .replace(/>/g, '&gt;')    // 转义 >
+    .replace(/\n/g, '<br>')   // 最后将换行符转换为 <br> 标签
 }
 
 // 统一获取元素样式的方法
