@@ -1,8 +1,18 @@
 # 数据结构设计
 
+## 📋 更新记录
+
+- **v1.1.0** (2025-11-19): 添加响应式布局支持
+  - 实现动态缩放比例计算
+  - 支持多设备适配（桌面/平板/手机）
+  - 优化图形元素渲染（三角形、圆角矩形）
+  - 添加媒体查询和断点管理
+
 ## 一、核心数据模型概览
 
 DreamWeaver 采用基于 DOM 的渲染方案，核心数据模型围绕**画布元素（Canvas Element）**展开。所有可渲染的元素都遵循统一的基础接口，通过类型区分不同的元素类型。
+
+**🎨 响应式设计特性**：系统支持响应式布局，元素会根据画布实际尺寸自动缩放，保持设计的相对比例和外观。
 
 ## 二、当前实现的数据结构
 
@@ -122,7 +132,54 @@ interface CanvasState {
 }
 ```
 
-## 三、数据结构设计原则
+## 三、响应式设计机制
+
+### 1. 缩放比例计算
+
+系统通过动态计算缩放比例来实现响应式布局：
+
+```typescript
+// 设计稿基准宽度（1280px）
+const DESIGN_WIDTH = 1280
+
+// 实时计算缩放比例
+scale = actualCanvasWidth / DESIGN_WIDTH
+```
+
+### 2. 元素尺寸转换
+
+所有元素尺寸都会基于缩放比例进行转换：
+
+```typescript
+// 位置坐标
+actualX = element.x * scale
+actualY = element.y * scale
+
+// 尺寸
+actualWidth = element.width * scale
+actualHeight = element.height * scale
+
+// 字体大小
+actualFontSize = element.fontSize * scale
+```
+
+### 3. 响应式断点
+
+系统支持三种主要屏幕尺寸：
+
+- **桌面端** (> 768px): 完整功能显示
+- **平板端** (≤ 768px): 优化间距和字体
+- **手机端** (≤ 480px): 最小化布局，圆角边框
+
+### 4. 保持绝对值的属性
+
+以下属性在缩放时保持绝对像素值：
+- `borderWidth`: 边框宽度（UI一致性）
+- `borderRadius`: 圆角半径（视觉效果）
+- `filterIntensity`: 滤镜强度（效果强度）
+- `originalWidth/originalHeight`: 图片原始尺寸（用于计算比例）
+
+## 四、数据结构设计原则
 
 ### 1. 可扩展性
 - 使用联合类型（Union Types）支持多种元素类型
@@ -134,12 +191,18 @@ interface CanvasState {
 - 通过类型守卫区分不同元素类型
 - 避免使用 `any` 类型
 
-### 3. 性能考虑
+### 3. 响应式设计考虑
+- 数据存储使用设计稿原始尺寸，渲染时动态计算实际尺寸
+- 缩放比例实时计算，支持窗口大小变化
+- 保持关键视觉属性（如边框宽度）的绝对值，确保UI一致性
+
+### 4. 性能考虑
 - 元素ID使用字符串，便于快速查找
 - 选中状态使用ID数组，避免存储完整对象引用
+- 响应式计算优化，避免频繁重绘
 - 支持按需加载（未来扩展）
 
-## 四、当前实现状态
+## 五、当前实现状态
 
 ### ✅ 已实现
 - BaseElement 基础接口定义
@@ -148,14 +211,20 @@ interface CanvasState {
 - TextElement 文本元素接口（支持BIUS样式）
 - CanvasElement 联合类型
 - CanvasConfig 画布配置接口
+- **响应式布局系统**（动态缩放、媒体查询、多设备适配）
 
 ### ⏳ 待实现
-- ViewportState 视口状态管理
+- ViewportState 视口状态管理（目前使用简化实现）
 - CanvasState 完整画布状态管理
 - GroupElement 组合元素接口
 - 数据持久化结构
+- 高级响应式特性（自定义断点、设备特定样式）
 
-## 五、数据示例
+## 六、数据示例
+
+### 📝 数据存储说明
+
+**重要**：数据中存储的是设计稿的原始尺寸（基于1280px宽度设计稿），实际渲染时会根据画布当前尺寸进行缩放。
 
 ### 图形元素示例
 ```json
@@ -209,4 +278,34 @@ interface CanvasState {
   "lineHeight": 1.5
 }
 ```
+
+## 七、技术实现细节
+
+### 响应式渲染流程
+
+1. **初始化**: 监听窗口resize事件，获取画布实际尺寸
+2. **计算缩放**: `scale = actualWidth / DESIGN_WIDTH`
+3. **元素渲染**: 所有尺寸属性乘以scale进行渲染
+4. **性能优化**: 使用Vue响应式系统，只在尺寸变化时重新计算
+
+### 样式计算示例
+
+```typescript
+// 三角形元素渲染计算
+const scaledWidth = element.width * scale
+const scaledHeight = element.height * scale
+
+// CSS样式
+{
+  borderLeft: `${scaledWidth / 2}px solid transparent`,
+  borderRight: `${scaledWidth / 2}px solid transparent`,
+  borderBottom: `${scaledHeight}px solid ${element.backgroundColor}`
+}
+```
+
+### 浏览器兼容性
+
+- 支持所有现代浏览器
+- 使用CSS `aspect-ratio` 属性（现代浏览器支持）
+- 降级方案：固定高度代替宽高比
 

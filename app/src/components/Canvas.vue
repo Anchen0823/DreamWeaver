@@ -1,5 +1,5 @@
 <template>
-  <div class="canvas" :style="{ width: canvasWidth + 'px', height: canvasHeight + 'px' }">
+  <div class="canvas" :style="{ width: canvasWidth, height: canvasHeight }">
     <div
       v-for="element in elements"
       :key="element.id"
@@ -34,7 +34,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import type {
   CanvasElement,
   ShapeElement,
@@ -42,8 +42,37 @@ import type {
   TextElement
 } from '../types/canvas'
 
-const canvasWidth = ref(800)
-const canvasHeight = ref(550)
+// 响应式画布尺寸
+const canvasWidth = computed(() => '100%')
+const canvasHeight = computed(() => 'auto')
+
+// 画布的实际像素尺寸（用于计算元素位置）
+const actualCanvasWidth = ref(1280)
+const actualCanvasHeight = ref(720)
+
+// 缩放比例
+const scale = ref(1)
+
+// 更新画布尺寸
+const updateCanvasSize = () => {
+  const canvasElement = document.querySelector('.canvas') as HTMLElement
+  if (canvasElement) {
+    const rect = canvasElement.getBoundingClientRect()
+    actualCanvasWidth.value = rect.width
+    actualCanvasHeight.value = rect.height
+    scale.value = actualCanvasWidth.value / 1280 // 基于设计稿宽度计算缩放比例
+  }
+}
+
+// 监听窗口大小变化
+onMounted(() => {
+  updateCanvasSize()
+  window.addEventListener('resize', updateCanvasSize)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', updateCanvasSize)
+})
 
 const elements = ref<CanvasElement[]>([
   {
@@ -310,10 +339,10 @@ const elements = ref<CanvasElement[]>([
 const getBaseStyle = (element: CanvasElement): Record<string, string | number> => {
   return {
     position: 'absolute',
-    left: element.x + 'px',
-    top: element.y + 'px',
-    width: element.width + 'px',
-    height: element.height + 'px',
+    left: (element.x * scale.value) + 'px',
+    top: (element.y * scale.value) + 'px',
+    width: (element.width * scale.value) + 'px',
+    height: (element.height * scale.value) + 'px',
     boxSizing: 'border-box'
   }
 }
@@ -331,7 +360,7 @@ const getShapeStyle = (element: ShapeElement): Record<string, string | number> =
   if (element.type === 'rounded-rectangle') {
     return {
       ...baseStyle,
-      borderRadius: (element.borderRadius || 0) + 'px'
+      borderRadius: ((element.borderRadius || 0) * scale.value) + 'px'
     }
   }
 
@@ -343,15 +372,17 @@ const getShapeStyle = (element: ShapeElement): Record<string, string | number> =
   }
 
   if (element.type === 'triangle') {
+    const scaledWidth = element.width * scale.value
+    const scaledHeight = element.height * scale.value
     return {
       ...getBaseStyle(element),
       width: '0',
       height: '0',
       backgroundColor: 'transparent',
       border: 'none',
-      borderLeft: `${element.width / 2}px solid transparent`,
-      borderRight: `${element.width / 2}px solid transparent`,
-      borderBottom: `${element.height}px solid ${element.backgroundColor}`,
+      borderLeft: `${scaledWidth / 2}px solid transparent`,
+      borderRight: `${scaledWidth / 2}px solid transparent`,
+      borderBottom: `${scaledHeight}px solid ${element.backgroundColor}`,
       borderTopWidth: '0'
     }
   }
@@ -389,7 +420,7 @@ const getImageStyle = (element: ImageElement): Record<string, string | number> =
 const getTextStyle = (element: TextElement): Record<string, string | number> => {
   return {
     fontFamily: element.fontFamily,
-    fontSize: element.fontSize + 'px',
+    fontSize: (element.fontSize * scale.value) + 'px',
     color: element.color,
     backgroundColor: element.backgroundColor || 'transparent',
     fontWeight: element.bold ? 'bold' : 'normal',
@@ -400,7 +431,7 @@ const getTextStyle = (element: TextElement): Record<string, string | number> => 
     ].filter(Boolean).join(' ') || 'none',
     textAlign: element.textAlign || 'left',
     lineHeight: element.lineHeight || 1.5,
-    padding: '4px',
+    padding: (4 * scale.value) + 'px',
     boxSizing: 'border-box',
     wordWrap: 'break-word',
     width: '100%',
@@ -455,8 +486,12 @@ const getElementStyle = (element: CanvasElement): Record<string, string | number
   position: relative;
   background-color: #f8f9fa;
   border: 1px solid #dee2e6;
-  margin: 20px auto;
+  margin: 1.25rem auto;
   overflow: hidden;
+  width: 100%;
+  max-width: 1200px;
+  aspect-ratio: 16 / 9; /* 保持16:9的宽高比 */
+  min-height: 400px;
 }
 
 .element {
@@ -475,5 +510,22 @@ const getElementStyle = (element: CanvasElement): Record<string, string | number
 .text-content {
   user-select: text;
   white-space: pre-wrap;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .canvas {
+    margin: 1rem auto;
+    min-height: 300px;
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .canvas {
+    margin: 0.75rem auto;
+    min-height: 250px;
+    border-radius: 8px;
+  }
 }
 </style>
