@@ -43,8 +43,8 @@ import type {
 } from '../types/canvas'
 
 // 响应式画布尺寸
-const canvasWidth = computed(() => '100%')
-const canvasHeight = computed(() => 'auto')
+const canvasWidth = computed(() => '100vw')
+const canvasHeight = computed(() => '100vh')
 
 // 画布的实际像素尺寸（用于计算元素位置）
 const actualCanvasWidth = ref(1280)
@@ -483,15 +483,19 @@ const getElementStyle = (element: CanvasElement): Record<string, string | number
 
 <style scoped>
 .canvas {
-  position: relative;
-  background-color: #f8f9fa;
-  border: 1px solid #dee2e6;
-  margin: 1.25rem auto;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: #ffffff;
+  background-image: 
+    linear-gradient(rgba(0, 0, 0, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.1) 1px, transparent 1px);
+  background-size: 20px 20px;
   overflow: hidden;
-  width: 100%;
-  max-width: 1200px;
-  aspect-ratio: 16 / 9; /* 保持16:9的宽高比 */
-  min-height: 400px;
+  margin: 0;
+  padding: 0;
 }
 
 .element {
@@ -515,17 +519,13 @@ const getElementStyle = (element: CanvasElement): Record<string, string | number
 /* 响应式设计 */
 @media (max-width: 768px) {
   .canvas {
-    margin: 1rem auto;
-    min-height: 300px;
-    max-width: 100%;
+    background-size: 15px 15px;
   }
 }
 
 @media (max-width: 480px) {
   .canvas {
-    margin: 0.75rem auto;
-    min-height: 250px;
-    border-radius: 8px;
+    background-size: 10px 10px;
   }
 }
 </style>
