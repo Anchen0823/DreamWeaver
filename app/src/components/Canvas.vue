@@ -5,6 +5,7 @@
     @mousemove="handleMouseMove"
     @mouseup="handleMouseUp"
     @mouseleave="handleMouseUp"
+    @wheel="handleWheel"
     :class="{ 'is-dragging': isDragging }"
     :style="gridBackgroundStyle"
   >
@@ -63,8 +64,13 @@ const canvasHeight = computed(() => '100%')
 const actualCanvasWidth = ref(1280)
 const actualCanvasHeight = ref(720)
 
-// 缩放比例
+// 响应式缩放比例（基于窗口大小）
 const scale = ref(1)
+
+// 用户控制的缩放比例（通过滚轮缩放）
+const zoom = ref(1)
+const minZoom = 0.1
+const maxZoom = 5
 
 // 视口偏移量（用于无限画布）
 const viewportOffsetX = ref(0)
@@ -80,21 +86,24 @@ const dragStartOffsetY = ref(0)
 // 网格大小
 const gridSize = ref(20)
 
-// 画布样式（包含视口偏移）
+// 画布样式（包含视口偏移和缩放）
 const canvasStyle = computed(() => {
   return {
     width: '100%',
     height: '100%',
-    transform: `translate(${viewportOffsetX.value}px, ${viewportOffsetY.value}px)`
+    transform: `translate(${viewportOffsetX.value}px, ${viewportOffsetY.value}px) scale(${zoom.value})`,
+    transformOrigin: '0 0'
   }
 })
 
-// 网格背景位置（相对于视口固定）
+// 网格背景位置（相对于视口固定，考虑缩放）
 const gridBackgroundStyle = computed(() => {
-  const offsetX = viewportOffsetX.value % (gridSize.value * 2)
-  const offsetY = viewportOffsetY.value % (gridSize.value * 2)
+  const scaledGridSize = gridSize.value * zoom.value
+  const offsetX = viewportOffsetX.value % (scaledGridSize * 2)
+  const offsetY = viewportOffsetY.value % (scaledGridSize * 2)
   return {
-    backgroundPosition: `${offsetX}px ${offsetY}px`
+    backgroundPosition: `${offsetX}px ${offsetY}px`,
+    backgroundSize: `${scaledGridSize}px ${scaledGridSize}px`
   }
 })
 
@@ -144,10 +153,52 @@ const handleMouseUp = () => {
   isDragging.value = false
 }
 
+// 处理滚轮事件
+const handleWheel = (e: WheelEvent) => {
+  e.preventDefault()
+  
+  // Ctrl/Cmd + 滚轮：缩放
+  if (e.ctrlKey || e.metaKey) {
+    const delta = e.deltaY > 0 ? -0.1 : 0.1
+    const newZoom = Math.max(minZoom, Math.min(maxZoom, zoom.value + delta))
+    
+    // 以鼠标位置为中心进行缩放
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const mouseX = e.clientX - rect.left
+    const mouseY = e.clientY - rect.top
+    
+    // 计算缩放前后的坐标转换
+    const scaleFactor = newZoom / zoom.value
+    const newOffsetX = mouseX - (mouseX - viewportOffsetX.value) * scaleFactor
+    const newOffsetY = mouseY - (mouseY - viewportOffsetY.value) * scaleFactor
+    
+    zoom.value = newZoom
+    viewportOffsetX.value = newOffsetX
+    viewportOffsetY.value = newOffsetY
+  } 
+  // Shift + 滚轮：水平滚动
+  else if (e.shiftKey) {
+    viewportOffsetX.value -= e.deltaY
+  }
+  // 普通滚轮：垂直滚动
+  else {
+    viewportOffsetY.value -= e.deltaY
+  }
+}
+
 // 监听窗口大小变化
 onMounted(() => {
   updateCanvasSize()
   window.addEventListener('resize', updateCanvasSize)
+  // 阻止默认的滚轮缩放行为
+  const container = document.querySelector('.canvas-container') as HTMLElement
+  if (container) {
+    container.addEventListener('wheel', (e) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault()
+      }
+    }, { passive: false })
+  }
 })
 
 onUnmounted(() => {
@@ -416,6 +467,7 @@ const elements = ref<CanvasElement[]>([
 ])
 
 // 获取元素的基础样式（位置、尺寸）
+// 注意：缩放已经在画布级别应用，这里只需要响应式缩放
 const getBaseStyle = (element: CanvasElement): Record<string, string | number> => {
   return {
     position: 'absolute',
@@ -536,7 +588,7 @@ const getTextElementStyle = (element: TextElement): Record<string, string | numb
   return {
     ...baseStyle,
     height: 'auto',
-    minHeight: element.height + 'px'
+    minHeight: (element.height * scale.value) + 'px'
   }
 }
 
