@@ -16,8 +16,9 @@
       <div
         v-for="element in elements"
         :key="element.id"
-        :class="['element', element.type]"
+        :class="['element', element.type, { 'selected': isElementSelected(element.id) }]"
         :style="getElementStyle(element)"
+        @mousedown.stop="handleElementMouseDown(element.id, $event)"
       >
         <!-- 图形元素 -->
         <template v-if="element.type === 'rectangle' || element.type === 'rounded-rectangle' || element.type === 'circle' || element.type === 'triangle'">
@@ -43,6 +44,14 @@
           ></div>
         </template>
       </div>
+      
+      <!-- 选中框 -->
+      <div
+        v-for="elementId in selectedElementIds"
+        :key="`selection-${elementId}`"
+        class="selection-box"
+        :style="getSelectionBoxStyle(elementId)"
+      ></div>
     </div>
   </div>
 </template>
@@ -86,6 +95,9 @@ const dragStartOffsetY = ref(0)
 // 网格大小
 const gridSize = ref(20)
 
+// 选中的元素ID列表
+const selectedElementIds = ref<string[]>([])
+
 // 画布样式（包含视口偏移和缩放）
 const canvasStyle = computed(() => {
   return {
@@ -126,6 +138,11 @@ const handleMouseDown = (e: MouseEvent) => {
     return
   }
   
+  // 点击画布空白处，取消选中
+  if (e.button === 0) { // 左键
+    selectedElementIds.value = []
+  }
+  
   // 只有按住空格键或中键时才拖拽，或者默认允许拖拽
   if (e.button === 1 || e.ctrlKey || e.metaKey || true) { // 默认允许拖拽
     isDragging.value = true
@@ -134,6 +151,59 @@ const handleMouseDown = (e: MouseEvent) => {
     dragStartOffsetX.value = viewportOffsetX.value
     dragStartOffsetY.value = viewportOffsetY.value
     e.preventDefault()
+  }
+}
+
+// 处理元素鼠标按下事件
+const handleElementMouseDown = (elementId: string, e: MouseEvent) => {
+  e.stopPropagation()
+  
+  // 左键点击：选中/取消选中元素
+  if (e.button === 0) {
+    if (e.ctrlKey || e.metaKey) {
+      // Ctrl/Cmd + 点击：多选/取消选中
+      const index = selectedElementIds.value.indexOf(elementId)
+      if (index > -1) {
+        selectedElementIds.value.splice(index, 1)
+      } else {
+        selectedElementIds.value.push(elementId)
+      }
+    } else {
+      // 普通点击：单选
+      if (selectedElementIds.value.includes(elementId)) {
+        // 如果已选中，不取消选中（保持选中状态）
+        return
+      } else {
+        selectedElementIds.value = [elementId]
+      }
+    }
+  }
+}
+
+// 检查元素是否被选中
+const isElementSelected = (elementId: string): boolean => {
+  return selectedElementIds.value.includes(elementId)
+}
+
+// 获取选中框样式
+const getSelectionBoxStyle = (elementId: string): Record<string, string | number> => {
+  const element = elements.value.find(el => el.id === elementId)
+  if (!element) {
+    return {}
+  }
+  
+  const padding = 4 // 选中框与元素的间距
+  const scaledPadding = padding * scale.value
+  
+  return {
+    position: 'absolute',
+    left: (element.x * scale.value - scaledPadding) + 'px',
+    top: (element.y * scale.value - scaledPadding) + 'px',
+    width: (element.width * scale.value + scaledPadding * 2) + 'px',
+    height: (element.height * scale.value + scaledPadding * 2) + 'px',
+    boxSizing: 'border-box',
+    pointerEvents: 'none',
+    zIndex: 1000
   }
 }
 
@@ -653,6 +723,16 @@ const getElementStyle = (element: CanvasElement): Record<string, string | number
 
 .element:hover {
   opacity: 0.9;
+}
+
+/* 选中状态通过选中框显示 */
+
+.selection-box {
+  border: 2px solid #4a90e2;
+  border-radius: 2px;
+  background-color: transparent;
+  box-shadow: 0 0 0 1px rgba(74, 144, 226, 0.2);
+  pointer-events: none;
 }
 
 .image-content {
