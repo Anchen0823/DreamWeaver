@@ -6,7 +6,7 @@
     @mouseup="handleMouseUp"
     @mouseleave="handleMouseUp"
     @wheel="handleWheel"
-    :class="{ 'is-dragging': isDragging }"
+    :class="{ 'is-dragging': isDragging, 'can-drag': isSpacePressed }"
     :style="gridBackgroundStyle"
   >
     <div 
@@ -92,6 +92,9 @@ const dragStartY = ref(0)
 const dragStartOffsetX = ref(0)
 const dragStartOffsetY = ref(0)
 
+// 空格键状态
+const isSpacePressed = ref(false)
+
 // 网格大小
 const gridSize = ref(20)
 
@@ -143,8 +146,8 @@ const handleMouseDown = (e: MouseEvent) => {
     selectedElementIds.value = []
   }
   
-  // 只有按住空格键或中键时才拖拽，或者默认允许拖拽
-  if (e.button === 1 || e.ctrlKey || e.metaKey || true) { // 默认允许拖拽
+  // 只有按住空格键+左键或中键时才拖拽
+  if ((e.button === 0 && isSpacePressed.value) || e.button === 1) {
     isDragging.value = true
     dragStartX.value = e.clientX
     dragStartY.value = e.clientY
@@ -256,10 +259,31 @@ const handleWheel = (e: WheelEvent) => {
   }
 }
 
+// 处理键盘按下事件
+const handleKeyDown = (e: KeyboardEvent) => {
+  if (e.code === 'Space' || e.key === ' ') {
+    isSpacePressed.value = true
+    e.preventDefault() // 防止页面滚动
+  }
+}
+
+// 处理键盘释放事件
+const handleKeyUp = (e: KeyboardEvent) => {
+  if (e.code === 'Space' || e.key === ' ') {
+    isSpacePressed.value = false
+    // 如果正在拖拽，停止拖拽
+    if (isDragging.value) {
+      isDragging.value = false
+    }
+  }
+}
+
 // 监听窗口大小变化
 onMounted(() => {
   updateCanvasSize()
   window.addEventListener('resize', updateCanvasSize)
+  window.addEventListener('keydown', handleKeyDown)
+  window.addEventListener('keyup', handleKeyUp)
   // 阻止默认的滚轮缩放行为
   const container = document.querySelector('.canvas-container') as HTMLElement
   if (container) {
@@ -273,6 +297,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('resize', updateCanvasSize)
+  window.removeEventListener('keydown', handleKeyDown)
+  window.removeEventListener('keyup', handleKeyUp)
 })
 
 const elements = ref<CanvasElement[]>([
@@ -693,12 +719,16 @@ const getElementStyle = (element: CanvasElement): Record<string, string | number
   overflow: hidden;
   margin: 0;
   padding: 0;
-  cursor: grab;
+  cursor: default;
   background-color: #ffffff;
   background-image: 
     linear-gradient(rgba(0, 0, 0, 0.08) 1px, transparent 1px),
     linear-gradient(90deg, rgba(0, 0, 0, 0.08) 1px, transparent 1px);
   background-size: 20px 20px;
+}
+
+.canvas-container.can-drag {
+  cursor: grab;
 }
 
 .canvas-container.is-dragging {
