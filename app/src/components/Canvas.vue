@@ -52,6 +52,13 @@
         class="selection-box"
         :style="getSelectionBoxStyle(elementId)"
       ></div>
+      
+      <!-- 框选框 -->
+      <div
+        v-if="isSelecting"
+        class="selection-rect"
+        :style="getSelectionRectStyle()"
+      ></div>
     </div>
   </div>
 </template>
@@ -101,6 +108,16 @@ const gridSize = ref(20)
 // 选中的元素ID列表
 const selectedElementIds = ref<string[]>([])
 
+// 框选状态
+const isSelecting = ref(false)
+const selectionStartX = ref(0)
+const selectionStartY = ref(0)
+const selectionCurrentX = ref(0)
+const selectionCurrentY = ref(0)
+const isClick = ref(true) // 用于区分点击和拖动
+const clickThreshold = 5 // 移动超过5px才算拖动
+const isCtrlPressedDuringSelection = ref(false) // 记录框选开始时是否按住了 Ctrl/Cmd
+
 // 画布样式（包含视口偏移和缩放）
 const canvasStyle = computed(() => {
   return {
@@ -135,19 +152,45 @@ const updateCanvasSize = () => {
 
 // 处理鼠标按下事件
 const handleMouseDown = (e: MouseEvent) => {
-  // 如果点击的是元素，不触发画布拖拽
+  // 如果点击的是元素，不触发画布拖拽或框选
   const target = e.target as HTMLElement
   if (target.closest('.element')) {
     return
   }
   
-  // 点击画布空白处，取消选中
-  if (e.button === 0) { // 左键
-    selectedElementIds.value = []
+  // 左键处理
+  if (e.button === 0) {
+    // 如果按住空格键，则拖拽画布
+    if (isSpacePressed.value) {
+      isDragging.value = true
+      dragStartX.value = e.clientX
+      dragStartY.value = e.clientY
+      dragStartOffsetX.value = viewportOffsetX.value
+      dragStartOffsetY.value = viewportOffsetY.value
+      e.preventDefault()
+      return
+    }
+    
+    // 否则开始框选
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    selectionStartX.value = e.clientX - rect.left
+    selectionStartY.value = e.clientY - rect.top
+    selectionCurrentX.value = selectionStartX.value
+    selectionCurrentY.value = selectionStartY.value
+    isSelecting.value = true
+    isClick.value = true
+    isCtrlPressedDuringSelection.value = e.ctrlKey || e.metaKey
+    
+    // 如果之前没有按住 Ctrl/Cmd，清空选中
+    if (!isCtrlPressedDuringSelection.value) {
+      selectedElementIds.value = []
+    }
+    
+    e.preventDefault()
   }
   
-  // 只有按住空格键+左键或中键时才拖拽
-  if ((e.button === 0 && isSpacePressed.value) || e.button === 1) {
+  // 中键拖拽画布
+  if (e.button === 1) {
     isDragging.value = true
     dragStartX.value = e.clientX
     dragStartY.value = e.clientY
@@ -210,20 +253,133 @@ const getSelectionBoxStyle = (elementId: string): Record<string, string | number
   }
 }
 
+// 获取框选框样式
+const getSelectionRectStyle = (): Record<string, string | number> => {
+  const startX = Math.min(selectionStartX.value, selectionCurrentX.value)
+  const startY = Math.min(selectionStartY.value, selectionCurrentY.value)
+  const width = Math.abs(selectionCurrentX.value - selectionStartX.value)
+  const height = Math.abs(selectionCurrentY.value - selectionStartY.value)
+  
+  // 需要考虑视口偏移和缩放
+  const adjustedX = (startX - viewportOffsetX.value) / zoom.value
+  const adjustedY = (startY - viewportOffsetY.value) / zoom.value
+  const adjustedWidth = width / zoom.value
+  const adjustedHeight = height / zoom.value
+  
+  return {
+    position: 'absolute',
+    left: adjustedX + 'px',
+    top: adjustedY + 'px',
+    width: adjustedWidth + 'px',
+    height: adjustedHeight + 'px',
+    boxSizing: 'border-box',
+    pointerEvents: 'none',
+    zIndex: 999
+  }
+}
+
+// 根据框选框更新选中元素
+const updateSelectionFromRect = () => {
+  if (!isSelecting.value) {
+    return
+  }
+  
+  // 计算框选框的边界（考虑视口偏移和缩放）
+  const rectLeft = Math.min(selectionStartX.value, selectionCurrentX.value)
+  const rectTop = Math.min(selectionStartY.value, selectionCurrentY.value)
+  const rectRight = Math.max(selectionStartX.value, selectionCurrentX.value)
+  const rectBottom = Math.max(selectionStartY.value, selectionCurrentY.value)
+  
+  // 转换为画布坐标（考虑视口偏移和缩放）
+  const canvasRectLeft = (rectLeft - viewportOffsetX.value) / zoom.value / scale.value
+  const canvasRectTop = (rectTop - viewportOffsetY.value) / zoom.value / scale.value
+  const canvasRectRight = (rectRight - viewportOffsetX.value) / zoom.value / scale.value
+  const canvasRectBottom = (rectBottom - viewportOffsetY.value) / zoom.value / scale.value
+  
+  const newSelectedIds: string[] = []
+  
+  // 检查每个元素是否在框选范围内
+  elements.value.forEach(element => {
+    const elementLeft = element.x
+    const elementTop = element.y
+    const elementRight = element.x + element.width
+    const elementBottom = element.y + element.height
+    
+    // 检查元素是否与框选框相交
+    const isIntersecting = !(
+      elementRight < canvasRectLeft ||
+      elementLeft > canvasRectRight ||
+      elementBottom < canvasRectTop ||
+      elementTop > canvasRectBottom
+    )
+    
+    if (isIntersecting) {
+      newSelectedIds.push(element.id)
+    }
+  })
+  
+  // 如果按住 Ctrl/Cmd，则添加到现有选中列表，否则替换
+  if (isCtrlPressedDuringSelection.value) {
+    // 合并选中列表，去重
+    const combined = [...new Set([...selectedElementIds.value, ...newSelectedIds])]
+    selectedElementIds.value = combined
+  } else {
+    selectedElementIds.value = newSelectedIds
+  }
+}
+
 // 处理鼠标移动事件
 const handleMouseMove = (e: MouseEvent) => {
+  // 画布拖拽
   if (isDragging.value) {
     const deltaX = e.clientX - dragStartX.value
     const deltaY = e.clientY - dragStartY.value
     viewportOffsetX.value = dragStartOffsetX.value + deltaX
     viewportOffsetY.value = dragStartOffsetY.value + deltaY
     e.preventDefault()
+    return
+  }
+  
+  // 框选
+  if (isSelecting.value) {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    selectionCurrentX.value = e.clientX - rect.left
+    selectionCurrentY.value = e.clientY - rect.top
+    
+    // 检测是否移动超过阈值，如果是则认为是拖动而不是点击
+    const deltaX = Math.abs(selectionCurrentX.value - selectionStartX.value)
+    const deltaY = Math.abs(selectionCurrentY.value - selectionStartY.value)
+    if (deltaX > clickThreshold || deltaY > clickThreshold) {
+      isClick.value = false
+    }
+    
+    // 实时更新选中元素
+    updateSelectionFromRect()
+    
+    e.preventDefault()
   }
 }
 
 // 处理鼠标释放事件
-const handleMouseUp = () => {
-  isDragging.value = false
+const handleMouseUp = (e: MouseEvent) => {
+  // 结束画布拖拽
+  if (isDragging.value) {
+    isDragging.value = false
+  }
+  
+  // 结束框选
+  if (isSelecting.value) {
+    // 如果是点击（不是拖动），则清空选中（已在 handleMouseDown 中处理）
+    if (isClick.value) {
+      // 点击空白处，已清空选中，无需额外处理
+    } else {
+      // 拖动结束，更新选中元素
+      updateSelectionFromRect()
+    }
+    
+    isSelecting.value = false
+    isClick.value = true
+  }
 }
 
 // 处理滚轮事件
@@ -762,6 +918,13 @@ const getElementStyle = (element: CanvasElement): Record<string, string | number
   border-radius: 2px;
   background-color: transparent;
   box-shadow: 0 0 0 1px rgba(74, 144, 226, 0.2);
+  pointer-events: none;
+}
+
+.selection-rect {
+  border: 2px dashed #4a90e2;
+  border-radius: 2px;
+  background-color: rgba(74, 144, 226, 0.1);
   pointer-events: none;
 }
 
