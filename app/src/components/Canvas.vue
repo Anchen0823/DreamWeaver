@@ -1,34 +1,47 @@
 <template>
-  <div class="canvas" :style="{ width: canvasWidth, height: canvasHeight }">
-    <div
-      v-for="element in elements"
-      :key="element.id"
-      :class="['element', element.type]"
-      :style="getElementStyle(element)"
+  <div 
+    class="canvas-container"
+    @mousedown="handleMouseDown"
+    @mousemove="handleMouseMove"
+    @mouseup="handleMouseUp"
+    @mouseleave="handleMouseUp"
+    :class="{ 'is-dragging': isDragging }"
+    :style="gridBackgroundStyle"
+  >
+    <div 
+      class="canvas" 
+      :style="canvasStyle"
     >
-      <!-- 图形元素 -->
-      <template v-if="element.type === 'rectangle' || element.type === 'rounded-rectangle' || element.type === 'circle' || element.type === 'triangle'">
-        <!-- 图形通过CSS样式渲染，无需内容 -->
-      </template>
-      
-      <!-- 图片元素 -->
-      <template v-else-if="element.type === 'image'">
-        <img
-          :src="element.src"
-          :alt="element.id"
-          :style="getImageStyle(element)"
-          class="image-content"
-        />
-      </template>
-      
-      <!-- 文本元素 -->
-      <template v-else-if="element.type === 'text'">
-        <div
-          :style="getTextStyle(element)"
-          class="text-content"
-          v-html="formatTextContent(element)"
-        ></div>
-      </template>
+      <div
+        v-for="element in elements"
+        :key="element.id"
+        :class="['element', element.type]"
+        :style="getElementStyle(element)"
+      >
+        <!-- 图形元素 -->
+        <template v-if="element.type === 'rectangle' || element.type === 'rounded-rectangle' || element.type === 'circle' || element.type === 'triangle'">
+          <!-- 图形通过CSS样式渲染，无需内容 -->
+        </template>
+        
+        <!-- 图片元素 -->
+        <template v-else-if="element.type === 'image'">
+          <img
+            :src="element.src"
+            :alt="element.id"
+            :style="getImageStyle(element)"
+            class="image-content"
+          />
+        </template>
+        
+        <!-- 文本元素 -->
+        <template v-else-if="element.type === 'text'">
+          <div
+            :style="getTextStyle(element)"
+            class="text-content"
+            v-html="formatTextContent(element)"
+          ></div>
+        </template>
+      </div>
     </div>
   </div>
 </template>
@@ -53,15 +66,82 @@ const actualCanvasHeight = ref(720)
 // 缩放比例
 const scale = ref(1)
 
+// 视口偏移量（用于无限画布）
+const viewportOffsetX = ref(0)
+const viewportOffsetY = ref(0)
+
+// 拖拽状态
+const isDragging = ref(false)
+const dragStartX = ref(0)
+const dragStartY = ref(0)
+const dragStartOffsetX = ref(0)
+const dragStartOffsetY = ref(0)
+
+// 网格大小
+const gridSize = ref(20)
+
+// 画布样式（包含视口偏移）
+const canvasStyle = computed(() => {
+  return {
+    width: '100%',
+    height: '100%',
+    transform: `translate(${viewportOffsetX.value}px, ${viewportOffsetY.value}px)`
+  }
+})
+
+// 网格背景位置（相对于视口固定）
+const gridBackgroundStyle = computed(() => {
+  const offsetX = viewportOffsetX.value % (gridSize.value * 2)
+  const offsetY = viewportOffsetY.value % (gridSize.value * 2)
+  return {
+    backgroundPosition: `${offsetX}px ${offsetY}px`
+  }
+})
+
 // 更新画布尺寸
 const updateCanvasSize = () => {
-  const canvasElement = document.querySelector('.canvas') as HTMLElement
+  const canvasElement = document.querySelector('.canvas-container') as HTMLElement
   if (canvasElement) {
     const rect = canvasElement.getBoundingClientRect()
     actualCanvasWidth.value = rect.width
     actualCanvasHeight.value = rect.height
     scale.value = actualCanvasWidth.value / 1280 // 基于设计稿宽度计算缩放比例
   }
+}
+
+// 处理鼠标按下事件
+const handleMouseDown = (e: MouseEvent) => {
+  // 如果点击的是元素，不触发画布拖拽
+  const target = e.target as HTMLElement
+  if (target.closest('.element')) {
+    return
+  }
+  
+  // 只有按住空格键或中键时才拖拽，或者默认允许拖拽
+  if (e.button === 1 || e.ctrlKey || e.metaKey || true) { // 默认允许拖拽
+    isDragging.value = true
+    dragStartX.value = e.clientX
+    dragStartY.value = e.clientY
+    dragStartOffsetX.value = viewportOffsetX.value
+    dragStartOffsetY.value = viewportOffsetY.value
+    e.preventDefault()
+  }
+}
+
+// 处理鼠标移动事件
+const handleMouseMove = (e: MouseEvent) => {
+  if (isDragging.value) {
+    const deltaX = e.clientX - dragStartX.value
+    const deltaY = e.clientY - dragStartY.value
+    viewportOffsetX.value = dragStartOffsetX.value + deltaX
+    viewportOffsetY.value = dragStartOffsetY.value + deltaY
+    e.preventDefault()
+  }
+}
+
+// 处理鼠标释放事件
+const handleMouseUp = () => {
+  isDragging.value = false
 }
 
 // 监听窗口大小变化
@@ -482,20 +562,37 @@ const getElementStyle = (element: CanvasElement): Record<string, string | number
 </script>
 
 <style scoped>
-.canvas {
+.canvas-container {
   position: fixed;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: #ffffff;
-  background-image: 
-    linear-gradient(rgba(0, 0, 0, 0.1) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 0, 0, 0.1) 1px, transparent 1px);
-  background-size: 20px 20px;
   overflow: hidden;
   margin: 0;
   padding: 0;
+  cursor: grab;
+  background-color: #ffffff;
+  background-image: 
+    linear-gradient(rgba(0, 0, 0, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.08) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.canvas-container.is-dragging {
+  cursor: grabbing;
+}
+
+.canvas {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 10000px;
+  min-height: 10000px;
+  background-color: transparent;
+  margin: 0;
+  padding: 0;
+  will-change: transform;
 }
 
 .element {
@@ -509,6 +606,7 @@ const getElementStyle = (element: CanvasElement): Record<string, string | number
 .image-content {
   display: block;
   user-select: none;
+  pointer-events: none;
 }
 
 .text-content {
