@@ -43,8 +43,8 @@ import type {
 } from '../types/canvas'
 
 // 响应式画布尺寸
-const canvasWidth = computed(() => '100vw')
-const canvasHeight = computed(() => '100vh')
+const canvasWidth = computed(() => '100%')
+const canvasHeight = computed(() => '100%')
 
 // 画布的实际像素尺寸（用于计算元素位置）
 const actualCanvasWidth = ref(1280)
@@ -486,8 +486,8 @@ const getElementStyle = (element: CanvasElement): Record<string, string | number
   position: fixed;
   top: 0;
   left: 0;
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
   background-color: #ffffff;
   background-image: 
     linear-gradient(rgba(0, 0, 0, 0.1) 1px, transparent 1px),

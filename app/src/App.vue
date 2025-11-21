@@ -8,12 +8,31 @@ import Canvas from './components/Canvas.vue'
   </div>
 </template>
 
+<style>
+/* 全局样式重置，防止滚动条 */
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+#app {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+</style>
+
 <style scoped>
 .app {
   margin: 0;
   padding: 0;
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
 }
 </style>
