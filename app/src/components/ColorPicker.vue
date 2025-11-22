@@ -202,7 +202,7 @@ function rgbToHex(r: number, g: number, b: number) {
 function parseColor(color: string): { r: number; g: number; b: number; a: number } {
   // 处理 rgba 格式
   const rgbaMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/)
-  if (rgbaMatch) {
+  if (rgbaMatch && rgbaMatch[1] && rgbaMatch[2] && rgbaMatch[3]) {
     return {
       r: parseInt(rgbaMatch[1]),
       g: parseInt(rgbaMatch[2]),
