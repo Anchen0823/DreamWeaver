@@ -641,6 +641,31 @@ const handleKeyDown = (e: KeyboardEvent) => {
     }
     return
   }
+
+  // Delete/Backspace: 删除选中元素
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    // 如果正在编辑文本（焦点在输入框内），不处理删除
+    const activeElement = document.activeElement
+    if (activeElement && (
+      activeElement.tagName === 'INPUT' || 
+      activeElement.tagName === 'TEXTAREA' || 
+      (activeElement instanceof HTMLElement && activeElement.isContentEditable)
+    )) {
+      return
+    }
+
+    if (selection.selectedElementIds.value.length > 0) {
+      // 从元素数组中移除选中的元素
+      const selectedIds = selection.selectedElementIds.value
+      elements.value = elements.value.filter(element => !selectedIds.includes(element.id))
+      
+      // 清空选中状态
+      selection.selectedElementIds.value = []
+      
+      e.preventDefault()
+    }
+    return
+  }
 }
 
 // 处理键盘释放事件
