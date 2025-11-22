@@ -1,6 +1,22 @@
 <template>
   <div class="toolbar">
     <div class="toolbar-content">
+      <!-- Move工具（默认选择工具） -->
+      <div class="tool-group">
+        <button 
+          class="tool-button"
+          :class="{ active: !activeTool || activeTool === 'move' }"
+          @click="handleSelectMove"
+          title="选择/移动"
+        >
+          <MoveIcon />
+          <span class="tool-name">移动</span>
+        </button>
+      </div>
+
+      <!-- 分隔线 -->
+      <div class="toolbar-divider"></div>
+
       <!-- 图形工具组 -->
       <div class="tool-group">
         <div class="tool-label">图形</div>
@@ -91,6 +107,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import type { ElementType } from '../types/canvas'
+import MoveIcon from './icons/MoveIcon.vue'
 import RectangleIcon from './icons/RectangleIcon.vue'
 import RoundedRectangleIcon from './icons/RoundedRectangleIcon.vue'
 import CircleIcon from './icons/CircleIcon.vue'
@@ -109,6 +126,11 @@ const emit = defineEmits<{
 }>()
 
 const fileInputRef = ref<HTMLInputElement>()
+
+// 处理选择Move工具（默认状态）
+const handleSelectMove = () => {
+  emit('update:activeTool', null)
+}
 
 // 处理选择图形工具
 const handleSelectShape = (type: ElementType) => {

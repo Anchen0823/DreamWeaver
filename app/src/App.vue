@@ -19,7 +19,11 @@ const handleImageSelected = (src: string, width: number, height: number) => {
 
 <template>
   <div class="app">
-    <Canvas ref="canvasRef" :active-tool="activeTool" />
+    <Canvas 
+      ref="canvasRef" 
+      :active-tool="activeTool"
+      @update:active-tool="handleActiveToolUpdate"
+    />
     <Toolbar 
       :active-tool="activeTool"
       @update:active-tool="handleActiveToolUpdate"

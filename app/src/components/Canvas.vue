@@ -117,6 +117,7 @@ import { useViewport } from '../composables/useViewport'
 import { useCanvasInteraction } from '../composables/useCanvasInteraction'
 import { useElementSelection } from '../composables/useElementSelection'
 import { useClipboard } from '../composables/useClipboard'
+import { usePersistence } from '../composables/usePersistence'
 import { getElementStyle, getImageStyle, getTextStyle, formatTextContent } from '../utils/style-calculator'
 import { screenToCanvas } from '../utils/coordinate-utils'
 import { mockElements } from '../utils/mock-data'
@@ -126,8 +127,13 @@ const props = defineProps<{
   activeTool?: string | null
 }>()
 
-// 画布元素数据
-const elements = ref<CanvasElement[]>(mockElements)
+// Emits
+const emit = defineEmits<{
+  'update:activeTool': [tool: string | null]
+}>()
+
+// 画布元素数据（初始为空，由持久化服务加载）
+const elements = ref<CanvasElement[]>([])
 
 // 绘制状态
 const isDrawing = ref(false)
@@ -354,6 +360,13 @@ const selection = useElementSelection(elements, viewport)
 // 剪贴板
 const clipboard = useClipboard()
 
+// 持久化服务
+const persistence = usePersistence(elements, {
+  zoom: viewport.zoom,
+  viewportOffsetX: viewport.viewportOffsetX,
+  viewportOffsetY: viewport.viewportOffsetY
+})
+
 // 处理容器鼠标按下事件
 const handleContainerMouseDown = (e: MouseEvent) => {
   // 如果点击的是元素，不触发绘制或框选
@@ -566,12 +579,13 @@ const handleContainerMouseUp = (e?: MouseEvent) => {
       // 选中新创建的元素
       selection.selectedElementIds.value = [newElement.id]
       
-      // 如果是图片，清除待插入的图片数据并取消工具选择
+      // 如果是图片，清除待插入的图片数据
       if (element.type === 'image') {
         pendingImageData.value = null
-        // 通过emit通知父组件取消图片工具选择
-        // 这里暂时保留工具选择，用户可以继续绘制
       }
+      
+      // 绘制完成后，自动切换回move状态（取消工具选择）
+      emit('update:activeTool', null)
     }
     
     // 重置绘制状态
@@ -635,7 +649,7 @@ const handleKeyUp = (e: KeyboardEvent) => {
 }
 
 // 监听窗口大小变化
-onMounted(() => {
+onMounted(async () => {
   viewport.updateCanvasSize()
   window.addEventListener('resize', viewport.updateCanvasSize)
   window.addEventListener('keydown', handleKeyDown)
@@ -647,6 +661,14 @@ onMounted(() => {
         e.preventDefault()
       }
     }, { passive: false })
+  }
+  
+  // 初始化持久化服务并加载数据
+  await persistence.init()
+  
+  // 如果没有保存的数据，使用 mock 数据
+  if (elements.value.length === 0) {
+    elements.value = [...mockElements]
   }
 })
 
