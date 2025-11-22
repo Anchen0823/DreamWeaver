@@ -68,6 +68,24 @@
         :style="selection.getSelectionRectStyle()"
       ></div>
       
+      <!-- 文本浮动工具栏 -->
+      <TextToolbar
+        v-if="showTextToolbar && selectedTextElement"
+        :text-element="selectedTextElement"
+        :visible="showTextToolbar"
+        :position="textToolbarPosition"
+        @update:font-family="handleTextPropertyUpdate('fontFamily', $event)"
+        @update:font-size="handleTextPropertyUpdate('fontSize', $event)"
+        @update:color="handleTextPropertyUpdate('color', $event)"
+        @update:background-color="handleTextPropertyUpdate('backgroundColor', $event)"
+        @update:bold="handleTextPropertyUpdate('bold', $event)"
+        @update:italic="handleTextPropertyUpdate('italic', $event)"
+        @update:underline="handleTextPropertyUpdate('underline', $event)"
+        @update:strikethrough="handleTextPropertyUpdate('strikethrough', $event)"
+        @update:text-align="handleTextPropertyUpdate('textAlign', $event)"
+        @update:line-height="handleTextPropertyUpdate('lineHeight', $event)"
+      />
+      
       <!-- 绘制预览 -->
       <template v-if="isDrawing && previewElement">
         <div
@@ -121,6 +139,7 @@ import { usePersistence } from '../composables/usePersistence'
 import { getElementStyle, getImageStyle, getTextStyle, formatTextContent } from '../utils/style-calculator'
 import { screenToCanvas } from '../utils/coordinate-utils'
 import { mockElements } from '../utils/mock-data'
+import TextToolbar from './TextToolbar.vue'
 
 // Props
 const props = defineProps<{
@@ -367,11 +386,82 @@ const persistence = usePersistence(elements, {
   viewportOffsetY: viewport.viewportOffsetY
 })
 
+// 文本工具栏相关
+// 选中的文本元素（单选且为文本类型时）
+const selectedTextElement = computed<TextElement | null>(() => {
+  if (selection.selectedElementIds.value.length !== 1) {
+    return null
+  }
+  const elementId = selection.selectedElementIds.value[0]
+  const element = elements.value.find(el => el.id === elementId)
+  return element && element.type === 'text' ? (element as TextElement) : null
+})
+
+// 是否显示文本工具栏（单选文本元素时）
+const showTextToolbar = computed(() => {
+  return selectedTextElement.value !== null
+})
+
+// 文本工具栏位置
+const textToolbarPosition = computed(() => {
+  if (!selectedTextElement.value || !containerRef.value) {
+    return { x: 0, y: 0 }
+  }
+  
+  const element = selectedTextElement.value
+  const rect = containerRef.value.getBoundingClientRect()
+  
+  // 计算元素在屏幕上的位置（考虑 scale 和 zoom）
+  const totalScale = viewport.scale.value * viewport.zoom.value
+  const elementScreenX = element.x * totalScale + viewport.viewportOffsetX.value
+  const elementScreenY = element.y * totalScale + viewport.viewportOffsetY.value
+  
+  // 工具栏显示在元素上方，居中
+  const toolbarX = rect.left + elementScreenX + (element.width * totalScale) / 2
+  const toolbarY = rect.top + elementScreenY - 50 // 元素上方 50px
+  
+  return { x: toolbarX, y: toolbarY }
+})
+
+// 处理文本属性更新
+const handleTextPropertyUpdate = (property: string, value: any) => {
+  if (!selectedTextElement.value) {
+    return
+  }
+  
+  const elementId = selectedTextElement.value.id
+  const elementIndex = elements.value.findIndex(el => el.id === elementId)
+  if (elementIndex === -1) {
+    return
+  }
+  
+  const element = elements.value[elementIndex] as TextElement
+  if (element.type !== 'text') {
+    return
+  }
+  
+  // 创建新数组以确保响应式更新
+  const newElements = [...elements.value]
+  const updatedElement = { ...newElements[elementIndex] } as TextElement
+  
+  // 更新属性
+  ;(updatedElement as any)[property] = value
+  
+  // 替换元素
+  newElements[elementIndex] = updatedElement
+  elements.value = newElements
+}
+
 // 处理容器鼠标按下事件
 const handleContainerMouseDown = (e: MouseEvent) => {
   // 如果点击的是元素，不触发绘制或框选
   const target = e.target as HTMLElement
   if (target.closest('.element') && !target.closest('.preview')) {
+    return
+  }
+
+  // 如果点击的是文本工具栏，不触发框选
+  if (target.closest('.text-toolbar')) {
     return
   }
 
