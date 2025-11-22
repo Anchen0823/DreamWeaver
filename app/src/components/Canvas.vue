@@ -1,497 +1,752 @@
 <template>
-  <div class="canvas" :style="{ width: canvasWidth, height: canvasHeight }">
-    <div
-      v-for="element in elements"
-      :key="element.id"
-      :class="['element', element.type]"
-      :style="getElementStyle(element)"
+  <div 
+    class="canvas-container"
+    @mousedown="handleContainerMouseDown"
+    @mousemove="handleContainerMouseMove"
+    @mouseup="handleContainerMouseUp"
+    @mouseleave="handleContainerMouseUp"
+    @wheel="handleContainerWheel"
+    :class="{ 
+      'is-dragging': interaction.isDragging.value, 
+      'can-drag': interaction.isSpacePressed.value,
+      'is-drawing': isDrawing,
+      'tool-active': !!props.activeTool && props.activeTool !== 'text' && props.activeTool !== 'image',
+      'tool-text': props.activeTool === 'text',
+      'tool-image': props.activeTool === 'image' && pendingImageData
+    }"
+    :style="viewport.gridBackgroundStyle.value"
+    ref="containerRef"
+  >
+    <div 
+      class="canvas" 
+      :style="viewport.canvasStyle.value"
     >
-      <!-- 图形元素 -->
-      <template v-if="element.type === 'rectangle' || element.type === 'rounded-rectangle' || element.type === 'circle' || element.type === 'triangle'">
-        <!-- 图形通过CSS样式渲染，无需内容 -->
-      </template>
+      <div
+        v-for="element in elements"
+        :key="element.id"
+        :class="['element', element.type, { 'selected': selection.isElementSelected(element.id) }]"
+        :style="getElementStyle(element, viewport.scale.value)"
+        @mousedown.stop="selection.handleElementMouseDown(element.id, $event)"
+      >
+        <!-- 图形元素 -->
+        <template v-if="element.type === 'rectangle' || element.type === 'rounded-rectangle' || element.type === 'circle' || element.type === 'triangle'">
+          <!-- 图形通过CSS样式渲染，无需内容 -->
+        </template>
+        
+        <!-- 图片元素 -->
+        <template v-else-if="element.type === 'image'">
+          <img
+            :src="element.src"
+            :alt="element.id"
+            :style="getImageStyle(element)"
+            class="image-content"
+          />
+        </template>
+        
+        <!-- 文本元素 -->
+        <template v-else-if="element.type === 'text'">
+          <div
+            :style="getTextStyle(element, viewport.scale.value)"
+            class="text-content"
+            v-html="formatTextContent(element)"
+          ></div>
+        </template>
+      </div>
       
-      <!-- 图片元素 -->
-      <template v-else-if="element.type === 'image'">
-        <img
-          :src="element.src"
-          :alt="element.id"
-          :style="getImageStyle(element)"
-          class="image-content"
-        />
-      </template>
+      <!-- 选中框 -->
+      <div
+        v-for="elementId in selection.selectedElementIds.value"
+        :key="`selection-${elementId}`"
+        class="selection-box"
+        :style="selection.getSelectionBoxStyle(elementId)"
+      ></div>
       
-      <!-- 文本元素 -->
-      <template v-else-if="element.type === 'text'">
+      <!-- 框选框 -->
+      <div
+        v-if="selection.isSelecting.value"
+        class="selection-rect"
+        :style="selection.getSelectionRectStyle()"
+      ></div>
+      
+      <!-- 绘制预览 -->
+      <template v-if="isDrawing && previewElement">
         <div
-          :style="getTextStyle(element)"
-          class="text-content"
-          v-html="formatTextContent(element)"
+          :class="['element', 'preview', previewElement.type]"
+          :style="getElementStyle(previewElement, viewport.scale.value)"
+        >
+          <!-- 图片预览 -->
+          <template v-if="previewElement.type === 'image'">
+            <img
+              :src="(previewElement as ImageElement).src"
+              :alt="previewElement.id"
+              :style="getImageStyle(previewElement as ImageElement)"
+              class="image-content"
+            />
+          </template>
+          
+          <!-- 文本预览：绘制时不显示文本内容，只显示空框 -->
+          <template v-else-if="previewElement.type === 'text'">
+            <!-- 预览时不显示文本内容 -->
+          </template>
+        </div>
+        
+        <!-- 预览选中框轮廓 -->
+        <div
+          v-if="previewElement.width > 0 && previewElement.height > 0"
+          class="preview-selection-box"
+          :style="getPreviewSelectionBoxStyle()"
         ></div>
+        
+        <!-- 尺寸标签 -->
+        <div
+          v-if="previewElement.width > 0 && previewElement.height > 0"
+          class="size-label"
+          :style="sizeLabelStyle"
+        >
+          {{ formatSize(previewElement) }}
+        </div>
       </template>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import type {
-  CanvasElement,
-  ShapeElement,
-  ImageElement,
-  TextElement
-} from '../types/canvas'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import type { CanvasElement, ImageElement, TextElement, ShapeElement } from '../types/canvas'
+import { useViewport } from '../composables/useViewport'
+import { useCanvasInteraction } from '../composables/useCanvasInteraction'
+import { useElementSelection } from '../composables/useElementSelection'
+import { useClipboard } from '../composables/useClipboard'
+import { usePersistence } from '../composables/usePersistence'
+import { getElementStyle, getImageStyle, getTextStyle, formatTextContent } from '../utils/style-calculator'
+import { screenToCanvas } from '../utils/coordinate-utils'
+import { mockElements } from '../utils/mock-data'
 
-// 响应式画布尺寸
-const canvasWidth = computed(() => '100%')
-const canvasHeight = computed(() => 'auto')
+// Props
+const props = defineProps<{
+  activeTool?: string | null
+}>()
 
-// 画布的实际像素尺寸（用于计算元素位置）
-const actualCanvasWidth = ref(1280)
-const actualCanvasHeight = ref(720)
+// Emits
+const emit = defineEmits<{
+  'update:activeTool': [tool: string | null]
+}>()
 
-// 缩放比例
-const scale = ref(1)
+// 画布元素数据（初始为空，由持久化服务加载）
+const elements = ref<CanvasElement[]>([])
 
-// 更新画布尺寸
-const updateCanvasSize = () => {
-  const canvasElement = document.querySelector('.canvas') as HTMLElement
-  if (canvasElement) {
-    const rect = canvasElement.getBoundingClientRect()
-    actualCanvasWidth.value = rect.width
-    actualCanvasHeight.value = rect.height
-    scale.value = actualCanvasWidth.value / 1280 // 基于设计稿宽度计算缩放比例
+// 绘制状态
+const isDrawing = ref(false)
+const drawingStartX = ref(0)
+const drawingStartY = ref(0)
+const previewElement = ref<CanvasElement | null>(null)
+// 待插入的图片数据
+const pendingImageData = ref<{ src: string; originalWidth: number; originalHeight: number } | null>(null)
+
+// 生成唯一ID
+const generateId = () => {
+  return `element-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+}
+
+// 添加图形元素
+const addShape = (type: 'rectangle' | 'rounded-rectangle' | 'circle' | 'triangle') => {
+  // 默认位置在画布中心附近
+  const defaultX = 400
+  const defaultY = 300
+  const defaultWidth = 120
+  const defaultHeight = 80
+
+  const newElement: ShapeElement = {
+    id: generateId(),
+    type,
+    x: defaultX,
+    y: defaultY,
+    width: type === 'circle' ? 80 : defaultWidth,
+    height: type === 'circle' ? 80 : defaultHeight,
+    backgroundColor: '#4a90e2',
+    borderWidth: 2,
+    borderColor: '#357abd',
+    ...(type === 'rounded-rectangle' && { borderRadius: 8 })
   }
+
+  elements.value.push(newElement)
+  
+  // 选中新创建的元素
+  selection.selectedElementIds.value = [newElement.id]
+}
+
+// 添加图片元素
+const addImage = (src: string, originalWidth: number, originalHeight: number) => {
+  // 默认位置在画布中心附近
+  const defaultX = 400
+  const defaultY = 300
+  
+  // 限制最大尺寸
+  const maxWidth = 400
+  const maxHeight = 300
+  let width = originalWidth
+  let height = originalHeight
+  
+  if (width > maxWidth || height > maxHeight) {
+    const scale = Math.min(maxWidth / width, maxHeight / height)
+    width = width * scale
+    height = height * scale
+  }
+
+  const newElement: ImageElement = {
+    id: generateId(),
+    type: 'image',
+    x: defaultX,
+    y: defaultY,
+    width,
+    height,
+    src,
+    originalWidth,
+    originalHeight,
+    filter: 'none'
+  }
+
+  elements.value.push(newElement)
+  
+  // 选中新创建的元素
+  selection.selectedElementIds.value = [newElement.id]
+}
+
+// 添加文本元素
+const addText = () => {
+  // 默认位置在画布中心附近
+  const defaultX = 400
+  const defaultY = 300
+  const defaultWidth = 200
+  const defaultHeight = 50
+
+  const newElement: TextElement = {
+    id: generateId(),
+    type: 'text',
+    x: defaultX,
+    y: defaultY,
+    width: defaultWidth,
+    height: defaultHeight,
+    content: '双击编辑文本',
+    fontFamily: 'Arial, sans-serif',
+    fontSize: calculateFontSizeFromBoxSize(defaultWidth, defaultHeight),
+    color: '#333333',
+    bold: false,
+    italic: false,
+    underline: false,
+    strikethrough: false,
+    textAlign: 'left',
+    lineHeight: 1.5
+  }
+
+  elements.value.push(newElement)
+  
+  // 选中新创建的元素
+  selection.selectedElementIds.value = [newElement.id]
+}
+
+// 根据文本框大小计算合适的字体大小
+const calculateFontSizeFromBoxSize = (width: number, height: number): number => {
+  if (width <= 0 || height <= 0) {
+    return 24 // 默认字体大小
+  }
+  
+  // 使用较小的边来计算字体大小，确保文本能够适应文本框
+  // 字体大小 = 较小边 / 比例系数
+  // 比例系数可以根据需要调整，这里使用 8，意味着如果文本框高度是80px，字体大小约为10px
+  const minSize = Math.min(width, height)
+  const fontSize = Math.max(12, Math.min(48, minSize / 8)) // 限制在12-48px之间
+  
+  return Math.round(fontSize)
+}
+
+// 格式化尺寸显示
+const formatSize = (element: CanvasElement | null) => {
+  if (!element) return ''
+  const width = Math.round(element.width)
+  const height = Math.round(element.height)
+  return `${width}px × ${height}px`
+}
+
+// 计算尺寸标签的样式（使用computed确保响应式更新）
+const sizeLabelStyle = computed(() => {
+  if (!isDrawing.value || !previewElement.value || !containerRef.value) {
+    return { display: 'none' }
+  }
+  
+  const element = previewElement.value
+  const rect = containerRef.value.getBoundingClientRect()
+  
+  // 计算元素在画布上的位置（考虑视口偏移和缩放）
+  const canvasX = element.x * viewport.scale.value + viewport.viewportOffsetX.value
+  const canvasY = element.y * viewport.scale.value + viewport.viewportOffsetY.value
+  const canvasWidth = element.width * viewport.scale.value
+  
+  // 转换为屏幕坐标
+  const screenX = rect.left + canvasX + canvasWidth
+  const screenY = rect.top + canvasY
+  
+  return {
+    left: `${screenX + 8}px`,
+    top: `${screenY - 28}px`,
+    transform: 'translateX(-100%)'
+  }
+})
+
+// 获取尺寸标签的样式（用于模板）
+const getSizeLabelStyle = (element: CanvasElement | null) => {
+  return sizeLabelStyle.value
+}
+
+// 获取预览选中框的样式
+const getPreviewSelectionBoxStyle = (): Record<string, string | number> => {
+  if (!previewElement.value) {
+    return { display: 'none' }
+  }
+  
+  const element = previewElement.value
+  const padding = 4 // 选中框与元素的间距
+  const scaledPadding = padding * viewport.scale.value
+  
+  return {
+    position: 'absolute',
+    left: (element.x * viewport.scale.value - scaledPadding) + 'px',
+    top: (element.y * viewport.scale.value - scaledPadding) + 'px',
+    width: (element.width * viewport.scale.value + scaledPadding * 2) + 'px',
+    height: (element.height * viewport.scale.value + scaledPadding * 2) + 'px',
+    boxSizing: 'border-box',
+    pointerEvents: 'none',
+    zIndex: 10001
+  }
+}
+
+// 监听activeTool变化，取消绘制状态
+watch(() => props.activeTool, (newTool) => {
+  if (!newTool && isDrawing.value) {
+    isDrawing.value = false
+    previewElement.value = null
+  }
+  // 如果切换到非图片工具，清除待插入的图片数据
+  if (newTool !== 'image') {
+    pendingImageData.value = null
+  }
+})
+
+// 处理图片选择
+const handleImageSelected = (src: string, width: number, height: number) => {
+  pendingImageData.value = { src, originalWidth: width, originalHeight: height }
+}
+
+// 暴露方法供父组件调用
+defineExpose({
+  addShape,
+  addImage,
+  addText,
+  handleImageSelected
+})
+
+// 容器引用
+const containerRef = ref<HTMLElement>()
+
+// 视口管理
+const viewport = useViewport()
+
+// 画布交互
+const interaction = useCanvasInteraction(viewport)
+
+// 元素选择
+const selection = useElementSelection(elements, viewport)
+
+// 剪贴板
+const clipboard = useClipboard()
+
+// 持久化服务
+const persistence = usePersistence(elements, {
+  zoom: viewport.zoom,
+  viewportOffsetX: viewport.viewportOffsetX,
+  viewportOffsetY: viewport.viewportOffsetY
+})
+
+// 处理容器鼠标按下事件
+const handleContainerMouseDown = (e: MouseEvent) => {
+  // 如果点击的是元素，不触发绘制或框选
+  const target = e.target as HTMLElement
+  if (target.closest('.element') && !target.closest('.preview')) {
+    return
+  }
+
+  // 如果有激活的工具，开始绘制
+  if (props.activeTool && (props.activeTool === 'rectangle' || props.activeTool === 'rounded-rectangle' || props.activeTool === 'circle' || props.activeTool === 'triangle' || props.activeTool === 'text' || props.activeTool === 'image')) {
+    if (e.button === 0) {
+      // 图片工具需要先选择图片
+      if (props.activeTool === 'image' && !pendingImageData.value) {
+        e.preventDefault()
+        return
+      }
+      
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+      
+      // 转换为画布坐标
+      const canvasPos = screenToCanvas(
+        e.clientX,
+        e.clientY,
+        rect,
+        viewport.viewportOffsetX.value,
+        viewport.viewportOffsetY.value,
+        viewport.zoom.value,
+        viewport.scale.value
+      )
+      
+      // 开始拖拽绘制
+      drawingStartX.value = canvasPos.x
+      drawingStartY.value = canvasPos.y
+      isDrawing.value = true
+      
+      // 根据工具类型创建预览元素
+      if (props.activeTool === 'text') {
+        previewElement.value = {
+          id: 'preview-text',
+          type: 'text',
+          x: canvasPos.x,
+          y: canvasPos.y,
+          width: 0,
+          height: 0,
+          content: '双击编辑文本',
+          fontFamily: 'Arial, sans-serif',
+          fontSize: 24, // 初始字体大小，会在绘制过程中动态更新
+          color: '#333333',
+          bold: false,
+          italic: false,
+          underline: false,
+          strikethrough: false,
+          textAlign: 'left',
+          lineHeight: 1.5
+        } as TextElement
+      } else if (props.activeTool === 'image' && pendingImageData.value) {
+        previewElement.value = {
+          id: 'preview-image',
+          type: 'image',
+          x: canvasPos.x,
+          y: canvasPos.y,
+          width: 0,
+          height: 0,
+          src: pendingImageData.value.src,
+          originalWidth: pendingImageData.value.originalWidth,
+          originalHeight: pendingImageData.value.originalHeight,
+          filter: 'none'
+        } as ImageElement
+      } else {
+        // 图形工具
+        previewElement.value = {
+          id: 'preview-shape',
+          type: props.activeTool as 'rectangle' | 'rounded-rectangle' | 'circle' | 'triangle',
+          x: canvasPos.x,
+          y: canvasPos.y,
+          width: 0,
+          height: 0,
+          backgroundColor: '#4a90e2',
+          borderWidth: 2,
+          borderColor: '#357abd',
+          ...(props.activeTool === 'rounded-rectangle' && { borderRadius: 8 })
+        } as ShapeElement
+      }
+      
+      e.preventDefault()
+      return
+    }
+  }
+
+  // 先尝试处理画布拖拽
+  const handled = interaction.handleMouseDown(e)
+  if (handled) {
+    return
+  }
+
+  // 左键处理框选
+  if (e.button === 0) {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    selection.startSelection(x, y, e.ctrlKey || e.metaKey)
+    e.preventDefault()
+  }
+}
+
+// 处理容器鼠标移动事件
+const handleContainerMouseMove = (e: MouseEvent) => {
+  // 更新鼠标位置（用于粘贴）
+  if (containerRef.value) {
+    const rect = containerRef.value.getBoundingClientRect()
+    const canvasPos = screenToCanvas(
+      e.clientX,
+      e.clientY,
+      rect,
+      viewport.viewportOffsetX.value,
+      viewport.viewportOffsetY.value,
+      viewport.zoom.value,
+      viewport.scale.value
+    )
+    clipboard.updateMousePosition(canvasPos.x, canvasPos.y)
+    
+    // 如果正在绘制，更新预览元素
+    if (isDrawing.value && previewElement.value) {
+      const deltaX = canvasPos.x - drawingStartX.value
+      const deltaY = canvasPos.y - drawingStartY.value
+      
+      previewElement.value.x = Math.min(drawingStartX.value, canvasPos.x)
+      previewElement.value.y = Math.min(drawingStartY.value, canvasPos.y)
+      previewElement.value.width = Math.abs(deltaX)
+      previewElement.value.height = Math.abs(deltaY)
+      
+      // 如果是圆形，保持宽高相等
+      if (previewElement.value.type === 'circle') {
+        const size = Math.max(Math.abs(deltaX), Math.abs(deltaY))
+        previewElement.value.width = size
+        previewElement.value.height = size
+      }
+      
+      // 如果是图片，保持宽高比
+      if (previewElement.value.type === 'image') {
+        const imgElement = previewElement.value as ImageElement
+        const aspectRatio = imgElement.originalWidth / imgElement.originalHeight
+        if (Math.abs(deltaX) > Math.abs(deltaY)) {
+          previewElement.value.width = Math.abs(deltaX)
+          previewElement.value.height = Math.abs(deltaX) / aspectRatio
+        } else {
+          previewElement.value.height = Math.abs(deltaY)
+          previewElement.value.width = Math.abs(deltaY) * aspectRatio
+        }
+      }
+      
+      // 如果是文本，根据文本框大小动态调整字体大小
+      if (previewElement.value.type === 'text') {
+        const textElement = previewElement.value as TextElement
+        textElement.fontSize = calculateFontSizeFromBoxSize(
+          previewElement.value.width,
+          previewElement.value.height
+        )
+      }
+      
+      // 最小尺寸限制
+      if (previewElement.value.width < 10) {
+        previewElement.value.width = 10
+      }
+      if (previewElement.value.height < 10) {
+        previewElement.value.height = 10
+      }
+    }
+  }
+
+  // 如果正在绘制，不处理其他交互
+  if (isDrawing.value) {
+    e.preventDefault()
+    return
+  }
+
+  // 处理画布拖拽
+  const dragHandled = interaction.handleMouseMove(e)
+  if (dragHandled) {
+    return
+  }
+
+  // 处理框选
+  if (selection.isSelecting.value) {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    selection.updateSelectionPosition(x, y)
+    selection.updateSelectionFromRect()
+    e.preventDefault()
+  }
+}
+
+// 处理容器鼠标释放事件
+const handleContainerMouseUp = (e?: MouseEvent) => {
+  // 如果正在绘制，完成绘制
+  if (isDrawing.value && previewElement.value) {
+    const element = previewElement.value
+    
+    // 检查元素尺寸是否有效（只有在鼠标事件有效时才创建元素）
+    if (e && element.width > 0 && element.height > 0) {
+      // 创建新元素
+      const newElement: CanvasElement = {
+        ...element,
+        id: generateId()
+      } as CanvasElement
+      
+      elements.value.push(newElement)
+      
+      // 选中新创建的元素
+      selection.selectedElementIds.value = [newElement.id]
+      
+      // 如果是图片，清除待插入的图片数据
+      if (element.type === 'image') {
+        pendingImageData.value = null
+      }
+      
+      // 绘制完成后，自动切换回move状态（取消工具选择）
+      emit('update:activeTool', null)
+    }
+    
+    // 重置绘制状态
+    isDrawing.value = false
+    previewElement.value = null
+    if (e) {
+      e.preventDefault()
+    }
+    return
+  }
+
+  // 结束画布拖拽
+  const dragHandled = interaction.handleMouseUp()
+  if (dragHandled) {
+    return
+  }
+
+  // 结束框选
+  selection.endSelection()
+}
+
+// 处理容器滚轮事件
+const handleContainerWheel = (e: WheelEvent) => {
+  if (containerRef.value) {
+    const rect = containerRef.value.getBoundingClientRect()
+    interaction.handleWheel(e, rect)
+  }
+}
+
+// 处理键盘按下事件
+const handleKeyDown = (e: KeyboardEvent) => {
+  // 处理空格键
+  const spaceHandled = interaction.handleKeyDown(e)
+  if (spaceHandled) {
+    return
+  }
+
+  // Ctrl/Cmd + C: 复制
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
+    if (selection.selectedElementIds.value.length > 0) {
+      clipboard.copySelectedElements(selection.selectedElementIds.value, elements.value)
+      e.preventDefault()
+    }
+    return
+  }
+
+  // Ctrl/Cmd + V: 粘贴
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) {
+    if (clipboard.clipboard.value.length > 0) {
+      const newElements = clipboard.pasteElements(elements.value, selection.selectedElementIds)
+      elements.value.push(...newElements)
+      e.preventDefault()
+    }
+    return
+  }
+}
+
+// 处理键盘释放事件
+const handleKeyUp = (e: KeyboardEvent) => {
+  interaction.handleKeyUp(e)
 }
 
 // 监听窗口大小变化
-onMounted(() => {
-  updateCanvasSize()
-  window.addEventListener('resize', updateCanvasSize)
+onMounted(async () => {
+  viewport.updateCanvasSize()
+  window.addEventListener('resize', viewport.updateCanvasSize)
+  window.addEventListener('keydown', handleKeyDown)
+  window.addEventListener('keyup', handleKeyUp)
+  // 阻止默认的滚轮缩放行为
+  if (containerRef.value) {
+    containerRef.value.addEventListener('wheel', (e) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault()
+      }
+    }, { passive: false })
+  }
+  
+  // 初始化持久化服务并加载数据
+  await persistence.init()
+  
+  // 如果没有保存的数据，使用 mock 数据
+  if (elements.value.length === 0) {
+    elements.value = [...mockElements]
+  }
 })
 
 onUnmounted(() => {
-  window.removeEventListener('resize', updateCanvasSize)
+  window.removeEventListener('resize', viewport.updateCanvasSize)
+  window.removeEventListener('keydown', handleKeyDown)
+  window.removeEventListener('keyup', handleKeyUp)
 })
-
-const elements = ref<CanvasElement[]>([
-  {
-    id: 'rect1',
-    type: 'rectangle',
-    x: 50,
-    y: 50,
-    width: 100,
-    height: 80,
-    backgroundColor: '#ff6b6b',
-    borderWidth: 2,
-    borderColor: '#ff4757'
-  },
-  {
-    id: 'rounded-rect1',
-    type: 'rounded-rectangle',
-    x: 200,
-    y: 50,
-    width: 120,
-    height: 80,
-    backgroundColor: '#4ecdc4',
-    borderWidth: 3,
-    borderColor: '#26d0ce',
-    borderRadius: 10
-  },
-  {
-    id: 'circle1',
-    type: 'circle',
-    x: 400,
-    y: 50,
-    width: 80,
-    height: 80,
-    backgroundColor: '#45b7d1',
-    borderWidth: 2,
-    borderColor: '#3a9fbf'
-  },
-  {
-    id: 'triangle1',
-    type: 'triangle',
-    x: 550,
-    y: 50,
-    width: 100,
-    height: 80,
-    backgroundColor: '#96ceb4',
-    borderWidth: 2,
-    borderColor: '#88c5a8'
-  },
-  {
-    id: 'image1',
-    type: 'image',
-    x: 50,
-    y: 200,
-    width: 150,
-    height: 100,
-    src: '/test1.jpg',
-    originalWidth: 150,
-    originalHeight: 100,
-    filter: 'none'
-  },
-  {
-    id: 'image2',
-    type: 'image',
-    x: 220,
-    y: 200,
-    width: 150,
-    height: 100,
-    src: '/test1.jpg',
-    originalWidth: 150,
-    originalHeight: 100,
-    filter: 'grayscale',
-    filterIntensity: 100
-  },
-  {
-    id: 'image3',
-    type: 'image',
-    x: 390,
-    y: 200,
-    width: 150,
-    height: 100,
-    src: '/test1.jpg',
-    originalWidth: 150,
-    originalHeight: 100,
-    filter: 'blur',
-    filterIntensity: 3
-  },
-  {
-    id: 'image4',
-    type: 'image',
-    x: 560,
-    y: 200,
-    width: 150,
-    height: 100,
-    src: '/test1.jpg',
-    originalWidth: 150,
-    originalHeight: 100,
-    filter: 'contrast',
-    filterIntensity: 150
-  },
-  {
-    id: 'text1',
-    type: 'text',
-    x: 50,
-    y: 320,
-    width: 200,
-    height: 50,
-    content: 'Bold Text',
-    fontFamily: 'Arial, sans-serif',
-    fontSize: 24,
-    color: '#333333',
-    bold: true,
-    italic: false,
-    underline: false,
-    strikethrough: false,
-    textAlign: 'left',
-    lineHeight: 1.5
-  },
-  {
-    id: 'text2',
-    type: 'text',
-    x: 270,
-    y: 320,
-    width: 200,
-    height: 50,
-    content: 'Italic Text',
-    fontFamily: 'Arial, sans-serif',
-    fontSize: 24,
-    color: '#333333',
-    bold: false,
-    italic: true,
-    underline: false,
-    strikethrough: false,
-    textAlign: 'left',
-    lineHeight: 1.5
-  },
-  {
-    id: 'text3',
-    type: 'text',
-    x: 490,
-    y: 320,
-    width: 200,
-    height: 50,
-    content: 'Underline Text',
-    fontFamily: 'Arial, sans-serif',
-    fontSize: 24,
-    color: '#333333',
-    bold: false,
-    italic: false,
-    underline: true,
-    strikethrough: false,
-    textAlign: 'left',
-    lineHeight: 1.5
-  },
-  {
-    id: 'text4',
-    type: 'text',
-    x: 50,
-    y: 390,
-    width: 200,
-    height: 50,
-    content: 'Strikethrough Text',
-    fontFamily: 'Arial, sans-serif',
-    fontSize: 24,
-    color: '#333333',
-    bold: false,
-    italic: false,
-    underline: false,
-    strikethrough: true,
-    textAlign: 'left',
-    lineHeight: 1.5
-  },
-  {
-    id: 'text5',
-    type: 'text',
-    x: 270,
-    y: 390,
-    width: 200,
-    height: 50,
-    content: 'Bold & Italic',
-    fontFamily: 'Arial, sans-serif',
-    fontSize: 24,
-    color: '#333333',
-    bold: true,
-    italic: true,
-    underline: false,
-    strikethrough: false,
-    textAlign: 'left',
-    lineHeight: 1.5
-  },
-  {
-    id: 'text6',
-    type: 'text',
-    x: 490,
-    y: 390,
-    width: 200,
-    height: 50,
-    content: 'All Styles',
-    fontFamily: 'Arial, sans-serif',
-    fontSize: 24,
-    color: '#333333',
-    bold: true,
-    italic: true,
-    underline: true,
-    strikethrough: true,
-    textAlign: 'left',
-    lineHeight: 1.5
-  },
-  {
-    id: 'text7',
-    type: 'text',
-    x: 50,
-    y: 460,
-    width: 200,
-    height: 50,
-    content: 'Large Font Size',
-    fontFamily: 'Arial, sans-serif',
-    fontSize: 32,
-    color: '#ff6b6b',
-    bold: true,
-    italic: false,
-    underline: false,
-    strikethrough: false,
-    textAlign: 'left',
-    lineHeight: 1.5
-  },
-  {
-    id: 'text8',
-    type: 'text',
-    x: 270,
-    y: 460,
-    width: 200,
-    height: 50,
-    content: 'Center Aligned',
-    fontFamily: 'Arial, sans-serif',
-    fontSize: 24,
-    color: '#4ecdc4',
-    bold: false,
-    italic: false,
-    underline: false,
-    strikethrough: false,
-    textAlign: 'center',
-    lineHeight: 1.5
-  },
-  {
-    id: 'text9',
-    type: 'text',
-    x: 490,
-    y: 460,
-    width: 200,
-    height: 50,
-    content: 'Right Aligned',
-    fontFamily: 'Arial, sans-serif',
-    fontSize: 24,
-    color: '#45b7d1',
-    bold: false,
-    italic: false,
-    underline: false,
-    strikethrough: false,
-    textAlign: 'right',
-    lineHeight: 1.5
-  }
-])
-
-// 获取元素的基础样式（位置、尺寸）
-const getBaseStyle = (element: CanvasElement): Record<string, string | number> => {
-  return {
-    position: 'absolute',
-    left: (element.x * scale.value) + 'px',
-    top: (element.y * scale.value) + 'px',
-    width: (element.width * scale.value) + 'px',
-    height: (element.height * scale.value) + 'px',
-    boxSizing: 'border-box'
-  }
-}
-
-// 获取图形元素的样式
-const getShapeStyle = (element: ShapeElement): Record<string, string | number> => {
-  const baseStyle = {
-    ...getBaseStyle(element),
-    backgroundColor: element.backgroundColor,
-    borderWidth: element.borderWidth + 'px',
-    borderStyle: 'solid',
-    borderColor: element.borderColor
-  }
-
-  if (element.type === 'rounded-rectangle') {
-    return {
-      ...baseStyle,
-      borderRadius: ((element.borderRadius || 0) * scale.value) + 'px'
-    }
-  }
-
-  if (element.type === 'circle') {
-    return {
-      ...baseStyle,
-      borderRadius: '50%'
-    }
-  }
-
-  if (element.type === 'triangle') {
-    const scaledWidth = element.width * scale.value
-    const scaledHeight = element.height * scale.value
-    return {
-      ...getBaseStyle(element),
-      width: '0',
-      height: '0',
-      backgroundColor: 'transparent',
-      border: 'none',
-      borderLeft: `${scaledWidth / 2}px solid transparent`,
-      borderRight: `${scaledWidth / 2}px solid transparent`,
-      borderBottom: `${scaledHeight}px solid ${element.backgroundColor}`,
-      borderTopWidth: '0'
-    }
-  }
-
-  return baseStyle
-}
-
-// 获取图片元素的样式
-const getImageStyle = (element: ImageElement): Record<string, string | number> => {
-  const style: Record<string, string | number> = {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover'
-  }
-
-  // 应用滤镜
-  if (element.filter && element.filter !== 'none') {
-    switch (element.filter) {
-      case 'grayscale':
-        style.filter = `grayscale(${element.filterIntensity || 100}%)`
-        break
-      case 'blur':
-        style.filter = `blur(${element.filterIntensity || 5}px)`
-        break
-      case 'contrast':
-        style.filter = `contrast(${element.filterIntensity || 150}%)`
-        break
-    }
-  }
-
-  return style
-}
-
-// 获取文本元素的样式
-const getTextStyle = (element: TextElement): Record<string, string | number> => {
-  return {
-    fontFamily: element.fontFamily,
-    fontSize: (element.fontSize * scale.value) + 'px',
-    color: element.color,
-    backgroundColor: element.backgroundColor || 'transparent',
-    fontWeight: element.bold ? 'bold' : 'normal',
-    fontStyle: element.italic ? 'italic' : 'normal',
-    textDecoration: [
-      element.underline ? 'underline' : '',
-      element.strikethrough ? 'line-through' : ''
-    ].filter(Boolean).join(' ') || 'none',
-    textAlign: element.textAlign || 'left',
-    lineHeight: element.lineHeight || 1.5,
-    padding: (4 * scale.value) + 'px',
-    boxSizing: 'border-box',
-    wordWrap: 'break-word',
-    width: '100%',
-    minHeight: '100%',
-    height: 'auto'  // 自动高度以适应内容
-  }
-}
-
-// 格式化文本内容（处理换行等）
-const formatTextContent = (element: TextElement): string => {
-  return element.content
-    .replace(/&/g, '&amp;')  // 先转义 &，因为其他转义序列都包含 &
-    .replace(/</g, '&lt;')    // 转义 <
-    .replace(/>/g, '&gt;')    // 转义 >
-    .replace(/\n/g, '<br>')   // 最后将换行符转换为 <br> 标签
-}
-
-// 获取文本元素容器的样式（允许高度自动适应）
-const getTextElementStyle = (element: TextElement): Record<string, string | number> => {
-  const baseStyle = getBaseStyle(element)
-  // 文本元素使用 min-height 而不是固定 height，允许自动扩展
-  return {
-    ...baseStyle,
-    height: 'auto',
-    minHeight: element.height + 'px'
-  }
-}
-
-// 统一获取元素样式的方法
-const getElementStyle = (element: CanvasElement): Record<string, string | number> => {
-  if (element.type === 'rectangle' || 
-      element.type === 'rounded-rectangle' || 
-      element.type === 'circle' || 
-      element.type === 'triangle') {
-    return getShapeStyle(element as ShapeElement)
-  }
-  
-  if (element.type === 'image') {
-    return getBaseStyle(element)
-  }
-  
-  if (element.type === 'text') {
-    return getTextElementStyle(element as TextElement)
-  }
-  
-  return getBaseStyle(element)
-}
 </script>
 
 <style scoped>
+.canvas-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: calc(100% - 64px);
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  cursor: default;
+  background-color: #ffffff;
+  background-image: 
+    linear-gradient(rgba(0, 0, 0, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.08) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.canvas-container.can-drag {
+  cursor: grab;
+}
+
+.canvas-container.is-dragging {
+  cursor: grabbing;
+}
+
+.canvas-container.is-drawing {
+  cursor: crosshair;
+}
+
+.canvas-container.is-drawing.can-drag {
+  cursor: crosshair;
+}
+
+.canvas-container.tool-active {
+  cursor: crosshair;
+}
+
+.canvas-container.tool-active.can-drag {
+  cursor: crosshair;
+}
+
+.canvas-container.tool-text {
+  cursor: text;
+}
+
+.canvas-container.tool-text.can-drag {
+  cursor: text;
+}
+
+.canvas-container.tool-image {
+  cursor: crosshair;
+}
+
+.canvas-container.tool-image.can-drag {
+  cursor: crosshair;
+}
+
 .canvas {
   position: relative;
-  background-color: #f8f9fa;
-  border: 1px solid #dee2e6;
-  margin: 1.25rem auto;
-  overflow: hidden;
   width: 100%;
-  max-width: 1200px;
-  aspect-ratio: 16 / 9; /* 保持16:9的宽高比 */
-  min-height: 400px;
+  height: 100%;
+  min-width: 10000px;
+  min-height: 10000px;
+  background-color: transparent;
+  margin: 0;
+  padding: 0;
+  will-change: transform;
 }
 
 .element {
@@ -502,9 +757,27 @@ const getElementStyle = (element: CanvasElement): Record<string, string | number
   opacity: 0.9;
 }
 
+/* 选中状态通过选中框显示 */
+
+.selection-box {
+  border: 2px solid #4a90e2;
+  border-radius: 2px;
+  background-color: transparent;
+  box-shadow: 0 0 0 1px rgba(74, 144, 226, 0.2);
+  pointer-events: none;
+}
+
+.selection-rect {
+  border: 2px dashed #4a90e2;
+  border-radius: 2px;
+  background-color: rgba(74, 144, 226, 0.1);
+  pointer-events: none;
+}
+
 .image-content {
   display: block;
   user-select: none;
+  pointer-events: none;
 }
 
 .text-content {
@@ -512,20 +785,56 @@ const getElementStyle = (element: CanvasElement): Record<string, string | number
   white-space: pre-wrap;
 }
 
+/* 绘制预览样式 */
+.element.preview {
+  opacity: 0.7;
+  pointer-events: none;
+  z-index: 10000;
+}
+
+/* 预览选中框样式 */
+.preview-selection-box {
+  border: 2px solid #4a90e2;
+  border-radius: 2px;
+  background-color: transparent;
+  box-shadow: 0 0 0 1px rgba(74, 144, 226, 0.2);
+  pointer-events: none;
+}
+
+/* 尺寸标签样式 */
+.size-label {
+  position: fixed;
+  background: rgba(0, 0, 0, 0.8);
+  color: #ffffff;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 10001;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(4px);
+}
+
 /* 响应式设计 */
 @media (max-width: 768px) {
+  .canvas-container {
+    height: calc(100% - 56px);
+  }
+  
   .canvas {
-    margin: 1rem auto;
-    min-height: 300px;
-    max-width: 100%;
+    background-size: 15px 15px;
   }
 }
 
 @media (max-width: 480px) {
+  .canvas-container {
+    height: calc(100% - 56px);
+  }
+  
   .canvas {
-    margin: 0.75rem auto;
-    min-height: 250px;
-    border-radius: 8px;
+    background-size: 10px 10px;
   }
 }
 </style>
