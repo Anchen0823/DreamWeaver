@@ -1,10 +1,30 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import Canvas from './components/Canvas.vue'
+import Toolbar from './components/Toolbar.vue'
+
+const canvasRef = ref<InstanceType<typeof Canvas>>()
+const activeTool = ref<string | null>(null)
+
+// 处理activeTool更新
+const handleActiveToolUpdate = (tool: string | null) => {
+  activeTool.value = tool
+}
+
+// 处理图片选择
+const handleImageSelected = (src: string, width: number, height: number) => {
+  canvasRef.value?.handleImageSelected(src, width, height)
+}
 </script>
 
 <template>
   <div class="app">
-    <Canvas />
+    <Canvas ref="canvasRef" :active-tool="activeTool" />
+    <Toolbar 
+      :active-tool="activeTool"
+      @update:active-tool="handleActiveToolUpdate"
+      @image-selected="handleImageSelected"
+    />
   </div>
 </template>
 
@@ -34,6 +54,7 @@ html, body {
   width: 100%;
   height: 100%;
   overflow: hidden;
+  position: relative;
 }
 </style>
 
