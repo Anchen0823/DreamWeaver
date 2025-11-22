@@ -121,9 +121,12 @@ export function getTextStyle(
     padding: (4 * scale) + 'px',
     boxSizing: 'border-box',
     wordWrap: 'break-word',
+    overflowWrap: 'break-word',
     width: '100%',
     minHeight: '100%',
-    height: 'auto'  // 自动高度以适应内容
+    height: 'auto',  // 自动高度以适应内容
+    overflow: 'hidden',  // 隐藏溢出内容
+    display: 'block'
   }
 }
 

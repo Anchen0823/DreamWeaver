@@ -69,30 +69,43 @@
       ></div>
       
       <!-- 绘制预览 -->
-      <div
-        v-if="isDrawing && previewElement"
-        :class="['element', 'preview', previewElement.type]"
-        :style="getElementStyle(previewElement, viewport.scale.value)"
-      >
-        <!-- 图片预览 -->
-        <template v-if="previewElement.type === 'image'">
-          <img
-            :src="(previewElement as ImageElement).src"
-            :alt="previewElement.id"
-            :style="getImageStyle(previewElement as ImageElement)"
-            class="image-content"
-          />
-        </template>
+      <template v-if="isDrawing && previewElement">
+        <div
+          :class="['element', 'preview', previewElement.type]"
+          :style="getElementStyle(previewElement, viewport.scale.value)"
+        >
+          <!-- 图片预览 -->
+          <template v-if="previewElement.type === 'image'">
+            <img
+              :src="(previewElement as ImageElement).src"
+              :alt="previewElement.id"
+              :style="getImageStyle(previewElement as ImageElement)"
+              class="image-content"
+            />
+          </template>
+          
+          <!-- 文本预览：绘制时不显示文本内容，只显示空框 -->
+          <template v-else-if="previewElement.type === 'text'">
+            <!-- 预览时不显示文本内容 -->
+          </template>
+        </div>
         
-        <!-- 文本预览 -->
-        <template v-else-if="previewElement.type === 'text'">
-          <div
-            :style="getTextStyle(previewElement as TextElement, viewport.scale.value)"
-            class="text-content"
-            v-html="formatTextContent(previewElement as TextElement)"
-          ></div>
-        </template>
-      </div>
+        <!-- 预览选中框轮廓 -->
+        <div
+          v-if="previewElement.width > 0 && previewElement.height > 0"
+          class="preview-selection-box"
+          :style="getPreviewSelectionBoxStyle()"
+        ></div>
+        
+        <!-- 尺寸标签 -->
+        <div
+          v-if="previewElement.width > 0 && previewElement.height > 0"
+          class="size-label"
+          :style="sizeLabelStyle"
+        >
+          {{ formatSize(previewElement) }}
+        </div>
+      </template>
     </div>
   </div>
 </template>
@@ -210,7 +223,7 @@ const addText = () => {
     height: defaultHeight,
     content: '双击编辑文本',
     fontFamily: 'Arial, sans-serif',
-    fontSize: 24,
+    fontSize: calculateFontSizeFromBoxSize(defaultWidth, defaultHeight),
     color: '#333333',
     bold: false,
     italic: false,
@@ -224,6 +237,81 @@ const addText = () => {
   
   // 选中新创建的元素
   selection.selectedElementIds.value = [newElement.id]
+}
+
+// 根据文本框大小计算合适的字体大小
+const calculateFontSizeFromBoxSize = (width: number, height: number): number => {
+  if (width <= 0 || height <= 0) {
+    return 24 // 默认字体大小
+  }
+  
+  // 使用较小的边来计算字体大小，确保文本能够适应文本框
+  // 字体大小 = 较小边 / 比例系数
+  // 比例系数可以根据需要调整，这里使用 8，意味着如果文本框高度是80px，字体大小约为10px
+  const minSize = Math.min(width, height)
+  const fontSize = Math.max(12, Math.min(48, minSize / 8)) // 限制在12-48px之间
+  
+  return Math.round(fontSize)
+}
+
+// 格式化尺寸显示
+const formatSize = (element: CanvasElement | null) => {
+  if (!element) return ''
+  const width = Math.round(element.width)
+  const height = Math.round(element.height)
+  return `${width}px × ${height}px`
+}
+
+// 计算尺寸标签的样式（使用computed确保响应式更新）
+const sizeLabelStyle = computed(() => {
+  if (!isDrawing.value || !previewElement.value || !containerRef.value) {
+    return { display: 'none' }
+  }
+  
+  const element = previewElement.value
+  const rect = containerRef.value.getBoundingClientRect()
+  
+  // 计算元素在画布上的位置（考虑视口偏移和缩放）
+  const canvasX = element.x * viewport.scale.value + viewport.viewportOffsetX.value
+  const canvasY = element.y * viewport.scale.value + viewport.viewportOffsetY.value
+  const canvasWidth = element.width * viewport.scale.value
+  
+  // 转换为屏幕坐标
+  const screenX = rect.left + canvasX + canvasWidth
+  const screenY = rect.top + canvasY
+  
+  return {
+    left: `${screenX + 8}px`,
+    top: `${screenY - 28}px`,
+    transform: 'translateX(-100%)'
+  }
+})
+
+// 获取尺寸标签的样式（用于模板）
+const getSizeLabelStyle = (element: CanvasElement | null) => {
+  return sizeLabelStyle.value
+}
+
+// 获取预览选中框的样式
+const getPreviewSelectionBoxStyle = (): Record<string, string | number> => {
+  if (!previewElement.value) {
+    return { display: 'none' }
+  }
+  
+  const element = previewElement.value
+  const padding = 4 // 选中框与元素的间距
+  const scaledPadding = padding * viewport.scale.value
+  
+  return {
+    position: 'absolute',
+    left: (element.x * viewport.scale.value - scaledPadding) + 'px',
+    top: (element.y * viewport.scale.value - scaledPadding) + 'px',
+    width: (element.width * viewport.scale.value + scaledPadding * 2) + 'px',
+    height: (element.height * viewport.scale.value + scaledPadding * 2) + 'px',
+    boxSizing: 'border-box',
+    pointerEvents: 'none',
+    zIndex: 10001
+  }
 }
 
 // 监听activeTool变化，取消绘制状态
@@ -312,7 +400,7 @@ const handleContainerMouseDown = (e: MouseEvent) => {
           height: 0,
           content: '双击编辑文本',
           fontFamily: 'Arial, sans-serif',
-          fontSize: 24,
+          fontSize: 24, // 初始字体大小，会在绘制过程中动态更新
           color: '#333333',
           bold: false,
           italic: false,
@@ -415,6 +503,15 @@ const handleContainerMouseMove = (e: MouseEvent) => {
           previewElement.value.height = Math.abs(deltaY)
           previewElement.value.width = Math.abs(deltaY) * aspectRatio
         }
+      }
+      
+      // 如果是文本，根据文本框大小动态调整字体大小
+      if (previewElement.value.type === 'text') {
+        const textElement = previewElement.value as TextElement
+        textElement.fontSize = calculateFontSizeFromBoxSize(
+          previewElement.value.width,
+          previewElement.value.height
+        )
       }
       
       // 最小尺寸限制
@@ -671,6 +768,31 @@ onUnmounted(() => {
   opacity: 0.7;
   pointer-events: none;
   z-index: 10000;
+}
+
+/* 预览选中框样式 */
+.preview-selection-box {
+  border: 2px solid #4a90e2;
+  border-radius: 2px;
+  background-color: transparent;
+  box-shadow: 0 0 0 1px rgba(74, 144, 226, 0.2);
+  pointer-events: none;
+}
+
+/* 尺寸标签样式 */
+.size-label {
+  position: fixed;
+  background: rgba(0, 0, 0, 0.8);
+  color: #ffffff;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 10001;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(4px);
 }
 
 /* 响应式设计 */
