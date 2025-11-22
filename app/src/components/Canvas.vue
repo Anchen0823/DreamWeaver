@@ -315,27 +315,25 @@ const formatSize = (element: CanvasElement | null) => {
 }
 
 // 计算尺寸标签的样式（使用computed确保响应式更新）
+// 使用画布坐标系，与文本工具栏一致，位置会通过 .canvas 的 transform 自动应用视口偏移和缩放
 const sizeLabelStyle = computed(() => {
-  if (!isDrawing.value || !previewElement.value || !containerRef.value) {
+  if (!isDrawing.value || !previewElement.value) {
     return { display: 'none' }
   }
   
   const element = previewElement.value
-  const rect = containerRef.value.getBoundingClientRect()
   
-  // 计算元素在画布上的位置（考虑视口偏移和缩放）
-  const canvasX = element.x * viewport.scale.value + viewport.viewportOffsetX.value
-  const canvasY = element.y * viewport.scale.value + viewport.viewportOffsetY.value
-  const canvasWidth = element.width * viewport.scale.value
-  
-  // 转换为屏幕坐标
-  const screenX = rect.left + canvasX + canvasWidth
-  const screenY = rect.top + canvasY
+  // 使用画布坐标系，与选中框和工具栏的计算方式一致
+  // 位置会通过 .canvas 的 transform 自动应用视口偏移和缩放
+  // 标签显示在元素右上角，稍微上浮
+  const labelX = element.x * viewport.scale.value + element.width * viewport.scale.value
+  const labelY = element.y * viewport.scale.value - 8 / viewport.zoom.value // 上浮 8px（屏幕像素），需要除以 zoom 转换为画布坐标
   
   return {
-    left: `${screenX + 8}px`,
-    top: `${screenY - 28}px`,
-    transform: 'translateX(-100%)'
+    left: `${labelX}px`,
+    top: `${labelY}px`,
+    transform: 'translateX(-100%) translateY(-100%)',
+    marginRight: '4px'
   }
 })
 
@@ -1080,8 +1078,8 @@ onUnmounted(() => {
 
 /* 尺寸标签样式 */
 .size-label {
-  position: fixed;
-  background: rgba(0, 0, 0, 0.8);
+  position: absolute;
+  background: #4a90e2;
   color: #ffffff;
   padding: 4px 8px;
   border-radius: 4px;
@@ -1091,7 +1089,6 @@ onUnmounted(() => {
   pointer-events: none;
   z-index: 10001;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-  backdrop-filter: blur(4px);
 }
 
 /* 响应式设计 */
