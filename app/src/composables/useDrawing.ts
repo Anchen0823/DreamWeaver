@@ -92,7 +92,7 @@ export function useDrawing(
         y: canvasPos.y,
         width: 0,
         height: 0,
-        content: '双击编辑文本',
+        content: '',
         fontFamily: 'Arial, sans-serif',
         fontSize: 24, // 初始字体大小，会在绘制过程中动态更新
         color: '#333333',

@@ -109,7 +109,7 @@ export function useElementCreation(
       y: defaultY,
       width: defaultWidth,
       height: defaultHeight,
-      content: '双击编辑文本',
+      content: '',
       fontFamily: 'Arial, sans-serif',
       fontSize: calculateFontSizeFromBoxSize(defaultWidth, defaultHeight),
       color: '#333333',

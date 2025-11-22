@@ -204,16 +204,45 @@ watch(() => props.activeTool, (newTool) => {
   }
 })
 
+// 监听选中状态变化，当取消选中时检查并删除空的新创建文本元素
+watch(() => selection.selectedElementIds.value, (newIds, oldIds) => {
+  // 找出被取消选中的元素ID
+  const deselectedIds = oldIds?.filter(id => !newIds.includes(id)) || []
+  
+  // 检查每个被取消选中的元素
+  deselectedIds.forEach(elementId => {
+    // 如果正在编辑该元素，先保存
+    if (textEditing.editingTextElementId.value === elementId) {
+      textEditing.handleTextEditSave(elementId)
+    } else {
+      // 否则直接检查并删除
+      textEditing.checkAndDeleteEmptyNewText(elementId)
+    }
+  })
+})
+
 // 处理图片选择
 const handleImageSelected = (src: string, width: number, height: number) => {
   drawing.pendingImageData.value = { src, originalWidth: width, originalHeight: height }
+}
+
+// 包装 addText 方法，标记新创建的文本元素并自动进入编辑模式
+const addText = async () => {
+  elementCreation.addText()
+  // 获取最后添加的元素（应该是刚创建的文本元素）
+  const lastElement = elements.value[elements.value.length - 1]
+  if (lastElement && lastElement.type === 'text') {
+    textEditing.markAsNewlyCreated(lastElement.id)
+    // 自动进入编辑模式
+    await textEditing.autoStartEditing(lastElement.id)
+  }
 }
 
 // 暴露方法供父组件调用
 defineExpose({
   addShape: elementCreation.addShape,
   addImage: elementCreation.addImage,
-  addText: elementCreation.addText,
+  addText,
   handleImageSelected
 })
 

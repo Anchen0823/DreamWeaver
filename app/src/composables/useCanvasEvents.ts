@@ -152,8 +152,17 @@ export function useCanvasEvents(
       if (e && newElement) {
         elements.value.push(newElement)
         
-        // 选中新创建的元素
-        selection.selectedElementIds.value = [newElement.id]
+        // 如果是文本元素，标记为新创建的并自动进入编辑模式
+        if (newElement.type === 'text') {
+          textEditing.markAsNewlyCreated(newElement.id)
+          // 选中新创建的元素
+          selection.selectedElementIds.value = [newElement.id]
+          // 自动进入编辑模式
+          textEditing.autoStartEditing(newElement.id)
+        } else {
+          // 选中新创建的元素
+          selection.selectedElementIds.value = [newElement.id]
+        }
         
         // 绘制完成后，自动切换回move状态（取消工具选择）
         onToolChange(null)
