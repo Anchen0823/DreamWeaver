@@ -118,6 +118,13 @@ const isClick = ref(true) // 用于区分点击和拖动
 const clickThreshold = 5 // 移动超过5px才算拖动
 const isCtrlPressedDuringSelection = ref(false) // 记录框选开始时是否按住了 Ctrl/Cmd
 
+// 剪贴板（存储复制的元素）
+const clipboard = ref<CanvasElement[]>([])
+
+// 鼠标位置（用于粘贴）
+const mouseX = ref(0)
+const mouseY = ref(0)
+
 // 画布样式（包含视口偏移和缩放）
 const canvasStyle = computed(() => {
   return {
@@ -330,6 +337,12 @@ const updateSelectionFromRect = () => {
 
 // 处理鼠标移动事件
 const handleMouseMove = (e: MouseEvent) => {
+  // 更新鼠标位置（用于粘贴）
+  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+  // 转换为画布坐标（考虑视口偏移和缩放）
+  mouseX.value = (e.clientX - rect.left - viewportOffsetX.value) / zoom.value / scale.value
+  mouseY.value = (e.clientY - rect.top - viewportOffsetY.value) / zoom.value / scale.value
+  
   // 画布拖拽
   if (isDragging.value) {
     const deltaX = e.clientX - dragStartX.value
@@ -342,7 +355,6 @@ const handleMouseMove = (e: MouseEvent) => {
   
   // 框选
   if (isSelecting.value) {
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
     selectionCurrentX.value = e.clientX - rect.left
     selectionCurrentY.value = e.clientY - rect.top
     
@@ -415,11 +427,98 @@ const handleWheel = (e: WheelEvent) => {
   }
 }
 
+// 深拷贝元素
+const deepCloneElement = (element: CanvasElement): CanvasElement => {
+  return JSON.parse(JSON.stringify(element))
+}
+
+// 生成新的元素ID
+const generateNewElementId = (type: string): string => {
+  const timestamp = Date.now()
+  const random = Math.random().toString(36).substring(2, 9)
+  return `${type}-${timestamp}-${random}`
+}
+
+// 复制选中的元素
+const copySelectedElements = () => {
+  if (selectedElementIds.value.length === 0) {
+    return
+  }
+  
+  // 深拷贝选中的元素
+  clipboard.value = selectedElementIds.value
+    .map(id => elements.value.find(el => el.id === id))
+    .filter((el): el is CanvasElement => el !== undefined)
+    .map(el => deepCloneElement(el))
+}
+
+// 粘贴元素
+const pasteElements = () => {
+  if (clipboard.value.length === 0) {
+    return
+  }
+  
+  // 计算粘贴偏移量（如果粘贴多个元素，保持相对位置）
+  let offsetX = 0
+  let offsetY = 0
+  
+  const firstElement = clipboard.value[0]
+  if (!firstElement) {
+    return
+  }
+  
+  if (clipboard.value.length === 1) {
+    // 单个元素：粘贴到鼠标位置
+    offsetX = mouseX.value - firstElement.x
+    offsetY = mouseY.value - firstElement.y
+  } else {
+    // 多个元素：计算中心点偏移
+    const centerX = clipboard.value.reduce((sum, el) => sum + el.x + el.width / 2, 0) / clipboard.value.length
+    const centerY = clipboard.value.reduce((sum, el) => sum + el.y + el.height / 2, 0) / clipboard.value.length
+    offsetX = mouseX.value - centerX
+    offsetY = mouseY.value - centerY
+  }
+  
+  // 创建新元素并添加到画布
+  const newElements: CanvasElement[] = clipboard.value.map(element => {
+    const newElement = deepCloneElement(element)
+    newElement.id = generateNewElementId(element.type)
+    newElement.x = element.x + offsetX
+    newElement.y = element.y + offsetY
+    return newElement
+  })
+  
+  // 添加到画布
+  elements.value.push(...newElements)
+  
+  // 选中新粘贴的元素
+  selectedElementIds.value = newElements.map(el => el.id)
+}
+
 // 处理键盘按下事件
 const handleKeyDown = (e: KeyboardEvent) => {
   if (e.code === 'Space' || e.key === ' ') {
     isSpacePressed.value = true
     e.preventDefault() // 防止页面滚动
+    return
+  }
+  
+  // Ctrl/Cmd + C: 复制
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
+    if (selectedElementIds.value.length > 0) {
+      copySelectedElements()
+      e.preventDefault()
+    }
+    return
+  }
+  
+  // Ctrl/Cmd + V: 粘贴
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) {
+    if (clipboard.value.length > 0) {
+      pasteElements()
+      e.preventDefault()
+    }
+    return
   }
 }
 
