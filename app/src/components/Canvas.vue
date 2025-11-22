@@ -71,12 +71,16 @@
       </div>
       
       <!-- 选中框 -->
-      <div
+      <template
         v-for="elementId in selection.selectedElementIds.value"
         :key="`selection-${elementId}`"
-        class="selection-box"
-        :style="selection.getSelectionBoxStyle(elementId)"
-      ></div>
+      >
+        <div
+          v-if="editingTextElementId !== elementId"
+          class="selection-box"
+          :style="selection.getSelectionBoxStyle(elementId)"
+        ></div>
+      </template>
       
       <!-- 框选框 -->
       <div
@@ -515,6 +519,7 @@ const getTextEditStyle = (element: TextElement, scale: number): Record<string, s
     margin: '0',
     boxSizing: 'border-box',
     overflow: 'hidden',
+    borderRadius: '2px',
     background: element.backgroundColor || 'transparent',
     zIndex: 10001
   }
@@ -1046,11 +1051,15 @@ onUnmounted(() => {
   word-wrap: break-word;
   overflow-wrap: break-word;
   cursor: text;
+  border: none;
+  outline: none;
+  background: transparent;
+  resize: none;
 }
 
 .text-edit-input:focus {
-  border-color: #4a90e2;
-  box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.2);
+  outline: none;
+  box-shadow: none;
 }
 
 /* 绘制预览样式 */
