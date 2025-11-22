@@ -41,7 +41,11 @@
       <!-- 选中框和框选框 -->
       <CanvasSelection
         :selection="selection"
+        :resize="resize"
+        :viewport="viewport"
+        :elements="toRef(() => elements)"
         :editing-text-element-id="textEditing.editingTextElementId.value"
+        :container-ref="containerRef"
       />
       
       <!-- 文本浮动工具栏 -->
@@ -73,8 +77,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import type { TextElement } from '../types/canvas'
+import { ref, computed, onMounted, onUnmounted, watch, toRef } from 'vue'
+import type { TextElement, CanvasElement as CanvasElementType } from '../types/canvas'
 import { useViewport } from '../composables/useViewport'
 import { useCanvasInteraction } from '../composables/useCanvasInteraction'
 import { useElementSelection } from '../composables/useElementSelection'
@@ -83,6 +87,7 @@ import { usePersistence } from '../composables/usePersistence'
 import { useTextEditing } from '../composables/useTextEditing'
 import { useDrawing } from '../composables/useDrawing'
 import { useElementCreation } from '../composables/useElementCreation'
+import { useResize } from '../composables/useResize'
 import { useCanvasEvents } from '../composables/useCanvasEvents'
 import { mockElements } from '../utils/mock-data'
 import TextToolbar from './TextToolbar.vue'
@@ -101,7 +106,7 @@ const emit = defineEmits<{
 }>()
 
 // 画布元素数据（初始为空，由持久化服务加载）
-const elements = ref<any[]>([])
+const elements = ref<CanvasElementType[]>([])
 
 // 容器引用
 const containerRef = ref<HTMLElement>()
@@ -130,6 +135,9 @@ const drawing = useDrawing(
 
 // 文本编辑
 const textEditing = useTextEditing(elements, selection)
+
+// 调整大小
+const resize = useResize(elements, viewport)
 
 // 文本工具栏位置（使用画布坐标系，与选中框一致）
 const textToolbarPosition = computed(() => {
@@ -190,6 +198,7 @@ const events = useCanvasEvents(
   clipboard,
   drawing,
   textEditing,
+  resize,
   (tool) => emit('update:activeTool', tool)
 )
 
