@@ -15,7 +15,7 @@
       @mousedown.stop
       @click.stop
     >
-      <!-- 主颜色选择区域 -->
+      <!-- 主颜色选择区域（颜色滚动条） -->
       <div class="color-picker-main" ref="mainColorRef" @mousedown="handleMainColorMouseDown">
         <div class="color-gradient" :style="gradientStyle"></div>
         <div
@@ -32,16 +32,6 @@
           class="hue-handle"
           :style="hueHandleStyle"
           @mousedown.stop="handleHueHandleMouseDown"
-        ></div>
-      </div>
-      
-      <!-- 透明度滑块 -->
-      <div class="alpha-slider-wrapper" ref="alphaSliderRef" @mousedown="handleAlphaMouseDown">
-        <div class="alpha-slider" :style="alphaGradientStyle"></div>
-        <div
-          class="alpha-handle"
-          :style="alphaHandleStyle"
-          @mousedown.stop="handleAlphaHandleMouseDown"
         ></div>
       </div>
       
@@ -80,18 +70,16 @@
             class="color-input"
           />
         </div>
-        <div class="color-input-group">
-          <label>A</label>
-          <input
-            type="number"
-            v-model.number="alpha"
-            @input="handleAlphaInput"
-            min="0"
-            max="100"
-            step="1"
-            class="color-input"
-          />
-        </div>
+      </div>
+      
+      <!-- 透明度滑块 -->
+      <div class="alpha-slider-wrapper" ref="alphaSliderRef" @mousedown="handleAlphaMouseDown">
+        <div class="alpha-slider" :style="alphaGradientStyle"></div>
+        <div
+          class="alpha-handle"
+          :style="alphaHandleStyle"
+          @mousedown.stop="handleAlphaHandleMouseDown"
+        ></div>
       </div>
       
       <!-- 透明按钮 -->
@@ -241,8 +229,10 @@ function parseColor(color: string): { r: number; g: number; b: number; a: number
 
 // 将颜色和透明度转换为颜色字符串
 function formatColor(r: number, g: number, b: number, a: number): string {
+  // 即使透明度为 0，也返回 rgba 格式以保留 RGB 信息
+  // 这样预览按钮可以显示原来的颜色
   if (a === 0) {
-    return 'transparent'
+    return `rgba(${r}, ${g}, ${b}, 0)`
   }
   if (a === 100) {
     return rgbToHex(r, g, b)
@@ -293,18 +283,26 @@ const alphaHandleStyle = computed(() => {
 })
 
 // 计算预览按钮样式
+// 预览按钮只显示颜色，忽略透明度
 const previewButtonStyle = computed(() => {
-  const parsed = parseColor(props.modelValue)
-  const color = formatColor(parsed.r, parsed.g, parsed.b, parsed.a)
+  const colorValue = props.modelValue || '#000000'
   
-  if (color === 'transparent' || parsed.a < 100) {
+  // 如果是 transparent（旧数据可能还是这个格式），显示白色作为默认
+  if (colorValue === 'transparent') {
     return {
-      backgroundImage: `linear-gradient(45deg, #ccc 25%, transparent 25%), linear-gradient(-45deg, #ccc 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #ccc 75%), linear-gradient(-45deg, transparent 75%, #ccc 75%), ${color === 'transparent' ? 'transparent' : color}`,
-      backgroundSize: '8px 8px, 8px 8px, 8px 8px, 8px 8px, 100% 100%',
-      backgroundPosition: '0 0, 0 4px, 4px -4px, -4px 0px, 0 0'
+      backgroundColor: '#fff'
     }
   }
-  return { backgroundColor: color }
+  
+  // 解析颜色值（rgba 或 hex）
+  const parsed = parseColor(colorValue)
+  
+  // 提取 RGB 值，转换为 hex，忽略透明度
+  const hexColor = rgbToHex(parsed.r, parsed.g, parsed.b)
+  
+  return {
+    backgroundColor: hexColor
+  }
 })
 
 
@@ -552,18 +550,18 @@ onUnmounted(() => {
   transform: translateX(-50%);
   background: #fff;
   border: 1px solid #ddd;
-  border-radius: 8px;
-  padding: 12px;
+  border-radius: 6px;
+  padding: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   z-index: 10003;
-  min-width: 240px;
+  min-width: 180px;
 }
 
 .color-picker-main {
   position: relative;
   width: 100%;
-  height: 200px;
-  margin-bottom: 12px;
+  height: 120px;
+  margin-bottom: 8px;
   border-radius: 4px;
   overflow: hidden;
   cursor: crosshair;
@@ -587,9 +585,9 @@ onUnmounted(() => {
 .hue-slider-wrapper {
   position: relative;
   width: 100%;
-  height: 20px;
-  margin-bottom: 12px;
-  border-radius: 4px;
+  height: 16px;
+  margin-bottom: 8px;
+  border-radius: 3px;
   overflow: hidden;
   cursor: pointer;
 }
@@ -613,29 +611,29 @@ onUnmounted(() => {
 
 .color-inputs {
   display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: 6px;
+  margin-bottom: 8px;
 }
 
 .color-input-group {
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
 }
 
 .color-input-group label {
-  font-size: 12px;
+  font-size: 11px;
   color: #666;
-  min-width: 16px;
+  min-width: 14px;
 }
 
 .color-input {
   flex: 1;
-  padding: 4px 6px;
+  padding: 3px 4px;
   border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 12px;
+  border-radius: 3px;
+  font-size: 11px;
   text-align: center;
 }
 
@@ -647,9 +645,9 @@ onUnmounted(() => {
 .alpha-slider-wrapper {
   position: relative;
   width: 100%;
-  height: 20px;
-  margin-bottom: 12px;
-  border-radius: 4px;
+  height: 16px;
+  margin-bottom: 8px;
+  border-radius: 3px;
   overflow: hidden;
   cursor: pointer;
   border: 1px solid #ddd;
@@ -674,13 +672,12 @@ onUnmounted(() => {
 
 .transparent-button {
   width: 100%;
-  padding: 6px 12px;
-  margin-bottom: 12px;
+  padding: 5px 8px;
   border: 1px solid #ddd;
-  border-radius: 4px;
+  border-radius: 3px;
   background: #fff;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 11px;
   transition: all 0.2s;
 }
 
