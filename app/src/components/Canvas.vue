@@ -46,10 +46,27 @@
         <!-- 文本元素 -->
         <template v-else-if="element.type === 'text'">
           <div
+            v-if="editingTextElementId !== element.id"
             :style="getTextStyle(element, viewport.scale.value)"
             class="text-content"
-            v-html="formatTextContent(element)"
+            v-html="formatTextContent(element as TextElement)"
+            @dblclick.stop="handleTextDoubleClick(element.id, $event)"
           ></div>
+          <!-- 文本编辑输入框 -->
+          <textarea
+            v-else
+            ref="textEditInputRef"
+            :value="(element as TextElement).content"
+            @blur="handleTextEditBlur(element.id)"
+            @keydown.esc="handleTextEditCancel"
+            @keydown.ctrl.enter.exact.prevent="handleTextEditSave(element.id)"
+            @keydown.meta.enter.exact.prevent="handleTextEditSave(element.id)"
+            @input="handleTextEditInput(element.id, ($event.target as HTMLTextAreaElement).value)"
+            @mousedown.stop
+            @click.stop
+            :style="getTextEditStyle(element as TextElement, viewport.scale.value)"
+            class="text-edit-input"
+          ></textarea>
         </template>
       </div>
       
@@ -74,6 +91,7 @@
         :text-element="selectedTextElement"
         :visible="showTextToolbar"
         :position="textToolbarPosition"
+        :scale="viewport.scale.value"
         @update:font-family="handleTextPropertyUpdate('fontFamily', $event)"
         @update:font-size="handleTextPropertyUpdate('fontSize', $event)"
         @update:color="handleTextPropertyUpdate('color', $event)"
@@ -161,6 +179,11 @@ const drawingStartY = ref(0)
 const previewElement = ref<CanvasElement | null>(null)
 // 待插入的图片数据
 const pendingImageData = ref<{ src: string; originalWidth: number; originalHeight: number } | null>(null)
+
+// 文本编辑状态
+const editingTextElementId = ref<string | null>(null)
+const textEditInputRef = ref<HTMLTextAreaElement>()
+const editingTextContent = ref<string>('')
 
 // 生成唯一ID
 const generateId = () => {
@@ -402,23 +425,19 @@ const showTextToolbar = computed(() => {
   return selectedTextElement.value !== null
 })
 
-// 文本工具栏位置
+// 文本工具栏位置（使用画布坐标系，与选中框一致）
 const textToolbarPosition = computed(() => {
-  if (!selectedTextElement.value || !containerRef.value) {
+  if (!selectedTextElement.value) {
     return { x: 0, y: 0 }
   }
   
   const element = selectedTextElement.value
-  const rect = containerRef.value.getBoundingClientRect()
   
-  // 计算元素在屏幕上的位置（考虑 scale 和 zoom）
-  const totalScale = viewport.scale.value * viewport.zoom.value
-  const elementScreenX = element.x * totalScale + viewport.viewportOffsetX.value
-  const elementScreenY = element.y * totalScale + viewport.viewportOffsetY.value
-  
-  // 工具栏显示在元素上方，居中
-  const toolbarX = rect.left + elementScreenX + (element.width * totalScale) / 2
-  const toolbarY = rect.top + elementScreenY - 50 // 元素上方 50px
+  // 使用画布坐标系，与选中框的计算方式一致
+  // 位置会通过 .canvas 的 transform 自动应用视口偏移和缩放
+  // 工具栏显示在元素上方居中，偏移量需要考虑 zoom（因为 .canvas 有 scale(zoom)）
+  const toolbarX = element.x * viewport.scale.value + (element.width * viewport.scale.value) / 2
+  const toolbarY = element.y * viewport.scale.value - 70 / viewport.zoom.value // 元素上方 70px（屏幕像素），需要除以 zoom 转换为画布坐标
   
   return { x: toolbarX, y: toolbarY }
 })
@@ -452,8 +471,119 @@ const handleTextPropertyUpdate = (property: string, value: any) => {
   elements.value = newElements
 }
 
+// 处理文本双击事件
+const handleTextDoubleClick = (elementId: string, e: MouseEvent) => {
+  e.stopPropagation()
+  
+  const element = elements.value.find(el => el.id === elementId) as TextElement
+  if (!element || element.type !== 'text') {
+    return
+  }
+  
+  // 进入编辑模式
+  editingTextElementId.value = elementId
+  editingTextContent.value = element.content
+  
+  // 选中文本元素（如果未选中）
+  if (!selection.isElementSelected(elementId)) {
+    selection.selectedElementIds.value = [elementId]
+  }
+  
+  // 下一帧聚焦输入框
+  setTimeout(() => {
+    if (textEditInputRef.value) {
+      textEditInputRef.value.focus()
+      textEditInputRef.value.select()
+    }
+  }, 0)
+}
+
+// 获取文本编辑输入框样式
+const getTextEditStyle = (element: TextElement, scale: number): Record<string, string | number> => {
+  const textStyle = getTextStyle(element, scale)
+  return {
+    ...textStyle,
+    position: 'absolute',
+    left: '0',
+    top: '0',
+    width: '100%',
+    height: '100%',
+    resize: 'none',
+    border: '2px solid #4a90e2',
+    outline: 'none',
+    padding: textStyle.padding || `${4 * scale}px`,
+    margin: '0',
+    boxSizing: 'border-box',
+    overflow: 'hidden',
+    background: element.backgroundColor || 'transparent',
+    zIndex: 10001
+  }
+}
+
+// 处理文本编辑输入
+const handleTextEditInput = (elementId: string, value: string) => {
+  editingTextContent.value = value
+}
+
+// 处理文本编辑保存
+const handleTextEditSave = (elementId: string) => {
+  const elementIndex = elements.value.findIndex(el => el.id === elementId)
+  if (elementIndex === -1) {
+    editingTextElementId.value = null
+    return
+  }
+  
+  const element = elements.value[elementIndex] as TextElement
+  if (element.type !== 'text') {
+    editingTextElementId.value = null
+    return
+  }
+  
+  // 更新文本内容
+  const newElements = [...elements.value]
+  const updatedElement = { ...newElements[elementIndex] } as TextElement
+  updatedElement.content = editingTextContent.value
+  
+  newElements[elementIndex] = updatedElement
+  elements.value = newElements
+  
+  // 退出编辑模式
+  editingTextElementId.value = null
+  editingTextContent.value = ''
+}
+
+// 处理文本编辑取消
+const handleTextEditCancel = () => {
+  editingTextElementId.value = null
+  editingTextContent.value = ''
+}
+
+// 处理文本编辑失去焦点
+const handleTextEditBlur = (elementId: string) => {
+  // 延迟处理，以便点击其他元素时能正常处理
+  setTimeout(() => {
+    if (editingTextElementId.value === elementId) {
+      handleTextEditSave(elementId)
+    }
+  }, 200)
+}
+
 // 处理容器鼠标按下事件
 const handleContainerMouseDown = (e: MouseEvent) => {
+  // 如果正在编辑文本，不处理其他鼠标事件
+  if (editingTextElementId.value !== null) {
+    const target = e.target as HTMLElement
+    // 如果点击的是文本编辑输入框，不处理
+    if (target.closest('.text-edit-input')) {
+      return
+    }
+    // 否则保存并退出编辑模式
+    if (editingTextElementId.value) {
+      handleTextEditSave(editingTextElementId.value)
+    }
+    return
+  }
+  
   // 如果点击的是元素，不触发绘制或框选
   const target = e.target as HTMLElement
   if (target.closest('.element') && !target.closest('.preview')) {
@@ -707,6 +837,12 @@ const handleContainerWheel = (e: WheelEvent) => {
 
 // 处理键盘按下事件
 const handleKeyDown = (e: KeyboardEvent) => {
+  // 如果正在编辑文本，不处理其他键盘事件
+  if (editingTextElementId.value !== null) {
+    // 只处理 Esc 键（已在 textarea 上处理）
+    return
+  }
+  
   // 处理空格键
   const spaceHandled = interaction.handleKeyDown(e)
   if (spaceHandled) {
@@ -898,6 +1034,23 @@ onUnmounted(() => {
 .text-content {
   user-select: text;
   white-space: pre-wrap;
+}
+
+.text-edit-input {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  line-height: inherit;
+  text-align: inherit;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  cursor: text;
+}
+
+.text-edit-input:focus {
+  border-color: #4a90e2;
+  box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.2);
 }
 
 /* 绘制预览样式 */

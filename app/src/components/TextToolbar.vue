@@ -38,22 +38,18 @@
 
     <!-- 文字颜色 -->
     <div class="toolbar-group">
-      <input
-        type="color"
-        :value="textElement.color"
-        @change="handleColorChange"
-        class="toolbar-color"
+      <ColorPicker
+        :model-value="textElement.color"
+        @update:model-value="handleColorChange"
         title="文字颜色"
       />
     </div>
 
     <!-- 背景色 -->
     <div class="toolbar-group">
-      <input
-        type="color"
-        :value="textElement.backgroundColor || '#ffffff'"
-        @change="handleBackgroundColorChange"
-        class="toolbar-color"
+      <ColorPicker
+        :model-value="textElement.backgroundColor || '#ffffff'"
+        @update:model-value="handleBackgroundColorChange"
         title="背景颜色"
       />
     </div>
@@ -141,11 +137,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { TextElement } from '../types/canvas'
+import ColorPicker from './ColorPicker.vue'
 
 const props = defineProps<{
   textElement: TextElement | null
   visible: boolean
   position: { x: number; y: number }
+  scale?: number
 }>()
 
 const emit = defineEmits<{
@@ -185,15 +183,13 @@ const handleFontSizeChange = (e: Event) => {
 }
 
 // 颜色变更
-const handleColorChange = (e: Event) => {
-  const target = e.target as HTMLInputElement
-  emit('update:color', target.value)
+const handleColorChange = (value: string) => {
+  emit('update:color', value)
 }
 
 // 背景色变更
-const handleBackgroundColorChange = (e: Event) => {
-  const target = e.target as HTMLInputElement
-  emit('update:backgroundColor', target.value)
+const handleBackgroundColorChange = (value: string) => {
+  emit('update:backgroundColor', value)
 }
 
 // 切换加粗
@@ -233,7 +229,7 @@ const handleLineHeightChange = (e: Event) => {
 
 <style scoped>
 .text-toolbar {
-  position: fixed;
+  position: absolute;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -291,23 +287,6 @@ const handleLineHeightChange = (e: Event) => {
   margin-left: 2px;
 }
 
-.toolbar-color {
-  width: 32px;
-  height: 32px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  cursor: pointer;
-  padding: 0;
-}
-
-.toolbar-color::-webkit-color-swatch-wrapper {
-  padding: 0;
-}
-
-.toolbar-color::-webkit-color-swatch {
-  border: none;
-  border-radius: 3px;
-}
 
 .toolbar-divider {
   width: 1px;
