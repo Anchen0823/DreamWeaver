@@ -182,26 +182,28 @@ const handleSelectText = () => {
 <style scoped>
 .toolbar {
   position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
   height: 64px;
   background: #ffffff;
-  border-top: 1px solid #e5e5e5;
-  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.08);
+  border: 1px solid #e5e5e5;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
   z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 24px;
+  padding: 0 20px;
+  min-width: fit-content;
+  max-width: calc(100% - 48px);
 }
 
 .toolbar-content {
   display: flex;
   align-items: center;
-  gap: 16px;
-  max-width: 1200px;
-  width: 100%;
+  gap: 12px;
+  width: auto;
 }
 
 .tool-group {
@@ -276,7 +278,9 @@ const handleSelectText = () => {
 @media (max-width: 768px) {
   .toolbar {
     height: 56px;
-    padding: 0 12px;
+    padding: 0 16px;
+    bottom: 16px;
+    border-radius: 10px;
   }
 
   .toolbar-content {
