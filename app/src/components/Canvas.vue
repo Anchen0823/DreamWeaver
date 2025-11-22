@@ -252,7 +252,9 @@ defineExpose({
   addShape: elementCreation.addShape,
   addImage: elementCreation.addImage,
   addText,
-  handleImageSelected
+  handleImageSelected,
+  elements,
+  selection
 })
 
 // 持久化服务
@@ -295,7 +297,7 @@ onUnmounted(() => {
 
 <style scoped>
 .canvas-container {
-  position: fixed;
+  position: absolute;
   top: 0;
   left: 0;
   width: 100%;
