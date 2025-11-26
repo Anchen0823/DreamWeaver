@@ -78,6 +78,19 @@
         @update:filter-intensity="handleImagePropertyUpdate('filterIntensity', $event)"
       />
       
+      <!-- 图形浮动工具栏 -->
+      <ShapeToolbar
+        v-if="selectedShapeElement"
+        :shape-element="selectedShapeElement"
+        :visible="!!selectedShapeElement"
+        :position="shapeToolbarPosition"
+        :scale="viewport.scale.value"
+        @update:background-color="handleShapePropertyUpdate('backgroundColor', $event)"
+        @update:border-width="handleShapePropertyUpdate('borderWidth', $event)"
+        @update:border-color="handleShapePropertyUpdate('borderColor', $event)"
+        @update:border-radius="handleShapePropertyUpdate('borderRadius', $event)"
+      />
+      
       <!-- 绘制预览 -->
       <CanvasPreview
         :drawing="drawing"
@@ -89,7 +102,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, toRef } from 'vue'
-import type { TextElement, ImageElement, CanvasElement as CanvasElementType } from '../types/canvas'
+import type { TextElement, ImageElement, ShapeElement, CanvasElement as CanvasElementType } from '../types/canvas'
 import { useViewport } from '../composables/useViewport'
 import { useCanvasInteraction } from '../composables/useCanvasInteraction'
 import { useElementSelection } from '../composables/useElementSelection'
@@ -103,6 +116,7 @@ import { useCanvasEvents } from '../composables/useCanvasEvents'
 import { mockElements } from '../utils/mock-data'
 import TextToolbar from './TextToolbar.vue'
 import ImageToolbar from './ImageToolbar.vue'
+import ShapeToolbar from './ShapeToolbar.vue'
 import CanvasElement from './CanvasElement.vue'
 import CanvasSelection from './CanvasSelection.vue'
 import CanvasPreview from './CanvasPreview.vue'
@@ -161,6 +175,18 @@ const selectedImageElement = computed<ImageElement | null>(() => {
   return element && element.type === 'image' ? (element as ImageElement) : null
 })
 
+// 选中的图形元素（单选且为图形类型时）
+const selectedShapeElement = computed<ShapeElement | null>(() => {
+  if (selection.selectedElementIds.value.length !== 1) {
+    return null
+  }
+  const elementId = selection.selectedElementIds.value[0]
+  const element = elements.value.find(el => el.id === elementId)
+  return element && (element.type === 'rectangle' || element.type === 'rounded-rectangle' || element.type === 'circle' || element.type === 'triangle') 
+    ? (element as ShapeElement) 
+    : null
+})
+
 // 文本工具栏位置（使用画布坐标系，与选中框一致）
 const textToolbarPosition = computed(() => {
   const selectedText = textEditing.selectedTextElement.value
@@ -187,6 +213,24 @@ const imageToolbarPosition = computed(() => {
   }
   
   const element = selectedImage
+  
+  // 使用画布坐标系，与选中框的计算方式一致
+  // 位置会通过 .canvas 的 transform 自动应用视口偏移和缩放
+  // 工具栏显示在元素上方居中，偏移量需要考虑 zoom（因为 .canvas 有 scale(zoom)）
+  const toolbarX = element.x * viewport.scale.value + (element.width * viewport.scale.value) / 2
+  const toolbarY = element.y * viewport.scale.value - 70 / viewport.zoom.value // 元素上方 70px（屏幕像素），需要除以 zoom 转换为画布坐标
+  
+  return { x: toolbarX, y: toolbarY }
+})
+
+// 图形工具栏位置（使用画布坐标系，与选中框一致）
+const shapeToolbarPosition = computed(() => {
+  const selectedShape = selectedShapeElement.value
+  if (!selectedShape) {
+    return { x: 0, y: 0 }
+  }
+  
+  const element = selectedShape
   
   // 使用画布坐标系，与选中框的计算方式一致
   // 位置会通过 .canvas 的 transform 自动应用视口偏移和缩放
@@ -248,6 +292,36 @@ const handleImagePropertyUpdate = (property: string, value: any) => {
   // 创建新数组以确保响应式更新
   const newElements = [...elements.value]
   const updatedElement = { ...newElements[elementIndex] } as ImageElement
+  
+  // 更新属性
+  ;(updatedElement as any)[property] = value
+  
+  // 替换元素
+  newElements[elementIndex] = updatedElement
+  elements.value = newElements
+}
+
+// 处理图形属性更新
+const handleShapePropertyUpdate = (property: string, value: any) => {
+  const selectedShape = selectedShapeElement.value
+  if (!selectedShape) {
+    return
+  }
+  
+  const elementId = selectedShape.id
+  const elementIndex = elements.value.findIndex(el => el.id === elementId)
+  if (elementIndex === -1) {
+    return
+  }
+  
+  const element = elements.value[elementIndex] as ShapeElement
+  if (element.type !== 'rectangle' && element.type !== 'rounded-rectangle' && element.type !== 'circle' && element.type !== 'triangle') {
+    return
+  }
+  
+  // 创建新数组以确保响应式更新
+  const newElements = [...elements.value]
+  const updatedElement = { ...newElements[elementIndex] } as ShapeElement
   
   // 更新属性
   ;(updatedElement as any)[property] = value
