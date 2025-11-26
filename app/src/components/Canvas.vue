@@ -67,6 +67,17 @@
         @update:line-height="handleTextPropertyUpdate('lineHeight', $event)"
       />
       
+      <!-- 图片浮动工具栏 -->
+      <ImageToolbar
+        v-if="selectedImageElement"
+        :image-element="selectedImageElement"
+        :visible="!!selectedImageElement"
+        :position="imageToolbarPosition"
+        :scale="viewport.scale.value"
+        @update:filter="handleImagePropertyUpdate('filter', $event)"
+        @update:filter-intensity="handleImagePropertyUpdate('filterIntensity', $event)"
+      />
+      
       <!-- 绘制预览 -->
       <CanvasPreview
         :drawing="drawing"
@@ -78,7 +89,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, toRef } from 'vue'
-import type { TextElement, CanvasElement as CanvasElementType } from '../types/canvas'
+import type { TextElement, ImageElement, CanvasElement as CanvasElementType } from '../types/canvas'
 import { useViewport } from '../composables/useViewport'
 import { useCanvasInteraction } from '../composables/useCanvasInteraction'
 import { useElementSelection } from '../composables/useElementSelection'
@@ -91,6 +102,7 @@ import { useResize } from '../composables/useResize'
 import { useCanvasEvents } from '../composables/useCanvasEvents'
 import { mockElements } from '../utils/mock-data'
 import TextToolbar from './TextToolbar.vue'
+import ImageToolbar from './ImageToolbar.vue'
 import CanvasElement from './CanvasElement.vue'
 import CanvasSelection from './CanvasSelection.vue'
 import CanvasPreview from './CanvasPreview.vue'
@@ -139,6 +151,16 @@ const textEditing = useTextEditing(elements, selection)
 // 调整大小
 const resize = useResize(elements, viewport)
 
+// 选中的图片元素（单选且为图片类型时）
+const selectedImageElement = computed<ImageElement | null>(() => {
+  if (selection.selectedElementIds.value.length !== 1) {
+    return null
+  }
+  const elementId = selection.selectedElementIds.value[0]
+  const element = elements.value.find(el => el.id === elementId)
+  return element && element.type === 'image' ? (element as ImageElement) : null
+})
+
 // 文本工具栏位置（使用画布坐标系，与选中框一致）
 const textToolbarPosition = computed(() => {
   const selectedText = textEditing.selectedTextElement.value
@@ -147,6 +169,24 @@ const textToolbarPosition = computed(() => {
   }
   
   const element = selectedText
+  
+  // 使用画布坐标系，与选中框的计算方式一致
+  // 位置会通过 .canvas 的 transform 自动应用视口偏移和缩放
+  // 工具栏显示在元素上方居中，偏移量需要考虑 zoom（因为 .canvas 有 scale(zoom)）
+  const toolbarX = element.x * viewport.scale.value + (element.width * viewport.scale.value) / 2
+  const toolbarY = element.y * viewport.scale.value - 70 / viewport.zoom.value // 元素上方 70px（屏幕像素），需要除以 zoom 转换为画布坐标
+  
+  return { x: toolbarX, y: toolbarY }
+})
+
+// 图片工具栏位置（使用画布坐标系，与选中框一致）
+const imageToolbarPosition = computed(() => {
+  const selectedImage = selectedImageElement.value
+  if (!selectedImage) {
+    return { x: 0, y: 0 }
+  }
+  
+  const element = selectedImage
   
   // 使用画布坐标系，与选中框的计算方式一致
   // 位置会通过 .canvas 的 transform 自动应用视口偏移和缩放
@@ -178,6 +218,36 @@ const handleTextPropertyUpdate = (property: string, value: any) => {
   // 创建新数组以确保响应式更新
   const newElements = [...elements.value]
   const updatedElement = { ...newElements[elementIndex] } as TextElement
+  
+  // 更新属性
+  ;(updatedElement as any)[property] = value
+  
+  // 替换元素
+  newElements[elementIndex] = updatedElement
+  elements.value = newElements
+}
+
+// 处理图片属性更新
+const handleImagePropertyUpdate = (property: string, value: any) => {
+  const selectedImage = selectedImageElement.value
+  if (!selectedImage) {
+    return
+  }
+  
+  const elementId = selectedImage.id
+  const elementIndex = elements.value.findIndex(el => el.id === elementId)
+  if (elementIndex === -1) {
+    return
+  }
+  
+  const element = elements.value[elementIndex] as ImageElement
+  if (element.type !== 'image') {
+    return
+  }
+  
+  // 创建新数组以确保响应式更新
+  const newElements = [...elements.value]
+  const updatedElement = { ...newElements[elementIndex] } as ImageElement
   
   // 更新属性
   ;(updatedElement as any)[property] = value
