@@ -136,6 +136,40 @@ const textEditStyle = computed(() => {
   opacity: 0.9;
 }
 
+/* 三角形轮廓渲染 */
+.element.triangle {
+  position: relative;
+  background-color: transparent !important;
+}
+
+.element.triangle::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+  -webkit-clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+  background-color: var(--border-color, transparent);
+  z-index: 1;
+}
+
+.element.triangle::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transform-origin: 50% 66.67%;
+  transform: scale(var(--scale-ratio, 1));
+  clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+  -webkit-clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+  background-color: var(--background-color, transparent);
+  z-index: 2;
+}
+
 .image-content {
   display: block;
   user-select: none;

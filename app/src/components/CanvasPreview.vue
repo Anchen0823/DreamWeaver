@@ -85,6 +85,40 @@ const formattedSize = computed(() => {
   z-index: 10000;
 }
 
+/* 预览中的三角形轮廓渲染 */
+.element.preview.triangle {
+  position: relative;
+  background-color: transparent !important;
+}
+
+.element.preview.triangle::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+  -webkit-clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+  background-color: var(--border-color, transparent);
+  z-index: 1;
+}
+
+.element.preview.triangle::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transform-origin: 50% 66.67%;
+  transform: scale(var(--scale-ratio, 1));
+  clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+  -webkit-clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+  background-color: var(--background-color, transparent);
+  z-index: 2;
+}
+
 .image-content {
   display: block;
   user-select: none;
