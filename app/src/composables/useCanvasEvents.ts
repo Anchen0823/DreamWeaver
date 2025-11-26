@@ -7,6 +7,7 @@ import type { useClipboard } from './useClipboard'
 import type { useDrawing } from './useDrawing'
 import type { useTextEditing } from './useTextEditing'
 import type { useResize } from './useResize'
+import type { useElementDrag } from './useElementDrag'
 import { screenToCanvas } from '../utils/coordinate-utils'
 
 /**
@@ -24,6 +25,7 @@ export function useCanvasEvents(
   drawing: ReturnType<typeof useDrawing>,
   textEditing: ReturnType<typeof useTextEditing>,
   resize: ReturnType<typeof useResize>,
+  elementDrag: ReturnType<typeof useElementDrag>,
   onToolChange: (tool: string | null) => void
 ) {
   // 处理容器鼠标按下事件
@@ -110,6 +112,14 @@ export function useCanvasEvents(
       return
     }
 
+    // 如果正在拖拽元素，优先处理元素拖拽
+    if (elementDrag.isDragging.value && containerRef.value) {
+      const rect = containerRef.value.getBoundingClientRect()
+      elementDrag.updateDrag(e.clientX, e.clientY, rect)
+      e.preventDefault()
+      return
+    }
+
     // 更新鼠标位置（用于粘贴）
     if (containerRef.value) {
       const rect = containerRef.value.getBoundingClientRect()
@@ -158,6 +168,15 @@ export function useCanvasEvents(
     // 如果正在调整大小，结束调整大小
     if (resize.isResizing.value) {
       resize.endResize()
+      if (e) {
+        e.preventDefault()
+      }
+      return
+    }
+
+    // 如果正在拖拽元素，结束元素拖拽
+    if (elementDrag.isDragging.value) {
+      elementDrag.endDrag()
       if (e) {
         e.preventDefault()
       }

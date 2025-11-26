@@ -34,6 +34,8 @@ export function useElementSelection(
 
     // 左键点击：选中/取消选中元素
     if (e.button === 0) {
+      const wasSelected = selectedElementIds.value.includes(elementId)
+      
       if (e.ctrlKey || e.metaKey) {
         // Ctrl/Cmd + 点击：多选/取消选中
         const index = selectedElementIds.value.indexOf(elementId)
@@ -44,14 +46,17 @@ export function useElementSelection(
         }
       } else {
         // 普通点击：单选
-        if (selectedElementIds.value.includes(elementId)) {
-          // 如果已选中，不取消选中（保持选中状态）
-          return
-        } else {
+        if (!wasSelected) {
           selectedElementIds.value = [elementId]
         }
+        // 如果已选中，保持选中状态（用于拖拽）
       }
+      
+      // 返回是否应该启动拖拽（元素已选中且没有按住 Ctrl/Cmd）
+      return wasSelected && !(e.ctrlKey || e.metaKey)
     }
+    
+    return false
   }
 
   // 开始框选

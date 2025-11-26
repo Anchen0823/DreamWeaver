@@ -10,6 +10,7 @@
       'is-dragging': interaction.isDragging.value, 
       'can-drag': interaction.isSpacePressed.value,
       'is-drawing': drawing.isDrawing.value,
+      'is-dragging-element': elementDrag.isDragging.value,
       'tool-active': !!props.activeTool && props.activeTool !== 'text' && props.activeTool !== 'image',
       'tool-text': props.activeTool === 'text',
       'tool-image': props.activeTool === 'image' && drawing.pendingImageData.value
@@ -30,7 +31,7 @@
         :scale="viewport.scale.value"
         :is-selected="selection.isElementSelected(element.id)"
         :is-editing="textEditing.editingTextElementId.value === element.id"
-        @element-mouse-down="selection.handleElementMouseDown"
+        @element-mouse-down="handleElementMouseDown"
         @text-double-click="textEditing.handleTextDoubleClick"
         @text-edit-input="textEditing.handleTextEditInput"
         @text-edit-save="textEditing.handleTextEditSave"
@@ -112,6 +113,7 @@ import { useTextEditing } from '../composables/useTextEditing'
 import { useDrawing } from '../composables/useDrawing'
 import { useElementCreation } from '../composables/useElementCreation'
 import { useResize } from '../composables/useResize'
+import { useElementDrag } from '../composables/useElementDrag'
 import { useCanvasEvents } from '../composables/useCanvasEvents'
 import { mockElements } from '../utils/mock-data'
 import TextToolbar from './TextToolbar.vue'
@@ -164,6 +166,9 @@ const textEditing = useTextEditing(elements, selection)
 
 // 调整大小
 const resize = useResize(elements, viewport)
+
+// 元素拖拽
+const elementDrag = useElementDrag(elements, viewport, selection)
 
 // 选中的图片元素（单选且为图片类型时）
 const selectedImageElement = computed<ImageElement | null>(() => {
@@ -271,6 +276,31 @@ const handleTextPropertyUpdate = (property: string, value: any) => {
   elements.value = newElements
 }
 
+// 处理元素鼠标按下事件
+const handleElementMouseDown = (elementId: string, e: MouseEvent) => {
+  // 如果点击的是调整大小的控制点，不处理拖拽
+  const target = e.target as HTMLElement
+  if (target.closest('.resize-handle')) {
+    // 调整大小的处理在 CanvasSelection 组件中
+    return
+  }
+  
+  // 如果有激活的工具（绘制工具），不启动拖拽
+  if (props.activeTool && props.activeTool !== null) {
+    selection.handleElementMouseDown(elementId, e)
+    return
+  }
+  
+  // 先处理选择逻辑
+  const shouldStartDrag = selection.handleElementMouseDown(elementId, e)
+  
+  // 如果元素已选中且没有按住 Ctrl/Cmd，启动拖拽
+  if (shouldStartDrag && containerRef.value && !textEditing.isEditingText.value) {
+    const rect = containerRef.value.getBoundingClientRect()
+    elementDrag.startDrag(elementId, e.clientX, e.clientY, rect)
+  }
+}
+
 // 处理图片属性更新
 const handleImagePropertyUpdate = (property: string, value: any) => {
   const selectedImage = selectedImageElement.value
@@ -343,6 +373,7 @@ const events = useCanvasEvents(
   drawing,
   textEditing,
   resize,
+  elementDrag,
   (tool) => emit('update:activeTool', tool)
 )
 
@@ -463,6 +494,14 @@ onUnmounted(() => {
 
 .canvas-container.is-dragging {
   cursor: grabbing;
+}
+
+.canvas-container.is-dragging-element {
+  cursor: move;
+}
+
+.canvas-container.is-dragging-element * {
+  cursor: move !important;
 }
 
 .canvas-container.is-drawing {
