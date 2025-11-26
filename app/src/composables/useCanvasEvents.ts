@@ -8,6 +8,7 @@ import type { useDrawing } from './useDrawing'
 import type { useTextEditing } from './useTextEditing'
 import type { useResize } from './useResize'
 import type { useElementDrag } from './useElementDrag'
+import type { useElementZoom } from './useElementZoom'
 import { screenToCanvas } from '../utils/coordinate-utils'
 
 /**
@@ -26,6 +27,7 @@ export function useCanvasEvents(
   textEditing: ReturnType<typeof useTextEditing>,
   resize: ReturnType<typeof useResize>,
   elementDrag: ReturnType<typeof useElementDrag>,
+  elementZoom: ReturnType<typeof useElementZoom>,
   onToolChange: (tool: string | null) => void
 ) {
   // 处理容器鼠标按下事件
@@ -224,10 +226,29 @@ export function useCanvasEvents(
 
   // 处理容器滚轮事件
   const handleContainerWheel = (e: WheelEvent) => {
-    if (containerRef.value) {
-      const rect = containerRef.value.getBoundingClientRect()
-      interaction.handleWheel(e, rect)
+    if (!containerRef.value) {
+      return
     }
+
+    const rect = containerRef.value.getBoundingClientRect()
+
+    // 如果按住 Ctrl/Cmd 且有选中的元素，优先对元素进行缩放
+    if ((e.ctrlKey || e.metaKey) && selection.selectedElementIds.value.length > 0) {
+      const delta = e.deltaY > 0 ? -0.1 : 0.1
+      const handled = elementZoom.zoomElements(
+        delta,
+        e.clientX,
+        e.clientY,
+        rect
+      )
+      if (handled) {
+        e.preventDefault()
+        return
+      }
+    }
+
+    // 否则使用默认的画布缩放或滚动
+    interaction.handleWheel(e, rect)
   }
 
   // 处理键盘按下事件

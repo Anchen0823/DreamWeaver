@@ -114,6 +114,7 @@ import { useDrawing } from '../composables/useDrawing'
 import { useElementCreation } from '../composables/useElementCreation'
 import { useResize } from '../composables/useResize'
 import { useElementDrag } from '../composables/useElementDrag'
+import { useElementZoom } from '../composables/useElementZoom'
 import { useCanvasEvents } from '../composables/useCanvasEvents'
 import { mockElements } from '../utils/mock-data'
 import TextToolbar from './TextToolbar.vue'
@@ -169,6 +170,9 @@ const resize = useResize(elements, viewport)
 
 // 元素拖拽
 const elementDrag = useElementDrag(elements, viewport, selection)
+
+// 元素缩放
+const elementZoom = useElementZoom(elements, viewport, selection)
 
 // 选中的图片元素（单选且为图片类型时）
 const selectedImageElement = computed<ImageElement | null>(() => {
@@ -374,6 +378,7 @@ const events = useCanvasEvents(
   textEditing,
   resize,
   elementDrag,
+  elementZoom,
   (tool) => emit('update:activeTool', tool)
 )
 
