@@ -261,6 +261,7 @@ const handleSelectText = () => {
   cursor: pointer;
   transition: all 0.2s ease;
   color: #333;
+  white-space: nowrap;
 }
 
 .tool-button:hover {
@@ -280,6 +281,7 @@ const handleSelectText = () => {
   font-size: 11px;
   font-weight: 500;
   line-height: 1;
+  white-space: nowrap;
 }
 
 .toolbar-divider {

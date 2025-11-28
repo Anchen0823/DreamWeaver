@@ -52,18 +52,31 @@ export function getShapeStyle(
   }
 
   if (element.type === 'triangle') {
+    // 使用 clip-path 创建三角形，支持轮廓渲染
+    const clipPath = 'polygon(50% 0%, 0% 100%, 100% 100%)'
+    const borderWidth = element.borderWidth * scale
     const scaledWidth = element.width * scale
     const scaledHeight = element.height * scale
+    
+    // 计算统一的缩放比例（内层三角形相对于外层的比例）
+    // 从顶部中心点统一缩放，保持三角形相似性
+    // 使用宽度和高度的最小值来确保均匀的边框
+    const minDimension = Math.min(scaledWidth, scaledHeight)
+    const scaleRatio = borderWidth > 0 && minDimension > 0 
+      ? Math.max(0, (minDimension - borderWidth * 2) / minDimension) 
+      : 1
+    
     return {
       ...getBaseStyle(element, scale),
-      width: '0',
-      height: '0',
-      backgroundColor: 'transparent',
-      border: 'none',
-      borderLeft: `${scaledWidth / 2}px solid transparent`,
-      borderRight: `${scaledWidth / 2}px solid transparent`,
-      borderBottom: `${scaledHeight}px solid ${element.backgroundColor}`,
-      borderTopWidth: '0'
+      backgroundColor: 'transparent', // 背景通过伪元素实现
+      clipPath: clipPath,
+      WebkitClipPath: clipPath, // Safari 兼容
+      border: 'none', // 边框通过伪元素实现
+      // 存储边框和背景信息供 CSS 使用
+      '--border-width': borderWidth + 'px',
+      '--border-color': element.borderColor,
+      '--background-color': element.backgroundColor,
+      '--scale-ratio': scaleRatio
     }
   }
 
