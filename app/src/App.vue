@@ -86,6 +86,11 @@ const handleLayerSelect = (elementId: string, ctrlKey: boolean) => {
 const handleReorderElement = (fromIndex: number, toIndex: number) => {
   canvasRef.value?.reorderElement(fromIndex, toIndex)
 }
+
+// 处理组内元素排序
+const handleReorderElementInGroup = (groupId: string, fromIndex: number, toIndex: number) => {
+  canvasRef.value?.reorderElementInGroup(groupId, fromIndex, toIndex)
+}
 </script>
 
 <template>
@@ -95,6 +100,7 @@ const handleReorderElement = (fromIndex: number, toIndex: number) => {
       :selected-element-ids="selectedElementIds"
       @select-element="handleLayerSelect"
       @reorder-element="handleReorderElement"
+      @reorder-element-in-group="handleReorderElementInGroup"
     />
     <div class="main-content">
       <Canvas 

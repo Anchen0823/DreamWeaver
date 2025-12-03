@@ -1,6 +1,39 @@
 import { ref } from 'vue'
-import type { CanvasElement } from '../types/canvas'
+import type { CanvasElement, GroupElement } from '../types/canvas'
 import type { useViewport } from './useViewport'
+
+/**
+ * 递归查找元素并计算其世界坐标
+ */
+function findElementWithWorldCoords(
+  list: CanvasElement[],
+  elementId: string,
+  offsetX = 0,
+  offsetY = 0
+): { element: CanvasElement; worldX: number; worldY: number } | null {
+  for (const el of list) {
+    if (el.id === elementId) {
+      return {
+        element: el,
+        worldX: el.x + offsetX,
+        worldY: el.y + offsetY
+      }
+    }
+    
+    if (el.type === 'group') {
+      const group = el as GroupElement
+      const found = findElementWithWorldCoords(
+        group.children,
+        elementId,
+        offsetX + el.x,
+        offsetY + el.y
+      )
+      if (found) return found
+    }
+  }
+  
+  return null
+}
 
 /**
  * 元素选择管理 Composable
@@ -159,18 +192,22 @@ export function useElementSelection(
 
   // 获取选中框样式
   const getSelectionBoxStyle = (elementId: string): Record<string, string | number> => {
-    const element = elements.value.find(el => el.id === elementId)
-    if (!element) {
+    const found = findElementWithWorldCoords(elements.value, elementId)
+    if (!found) {
       return {}
     }
+
+    const element = found.element
+    const worldX = found.worldX
+    const worldY = found.worldY
 
     const padding = 4 // 选中框与元素的间距
     const scaledPadding = padding * viewport.scale.value
 
     return {
       position: 'absolute',
-      left: (element.x * viewport.scale.value - scaledPadding) + 'px',
-      top: (element.y * viewport.scale.value - scaledPadding) + 'px',
+      left: (worldX * viewport.scale.value - scaledPadding) + 'px',
+      top: (worldY * viewport.scale.value - scaledPadding) + 'px',
       width: (element.width * viewport.scale.value + scaledPadding * 2) + 'px',
       height: (element.height * viewport.scale.value + scaledPadding * 2) + 'px',
       boxSizing: 'border-box',

@@ -46,10 +46,13 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   selectElement: [elementId: string, ctrlKey: boolean]
   reorderElement: [fromIndex: number, toIndex: number]
+  reorderElementInGroup: [groupId: string, fromIndex: number, toIndex: number]
 }>()
 
 const hoveredId = ref<string | null>(null)
 const draggedIndex = ref<number | null>(null)
+const draggedElementId = ref<string | null>(null)
+const draggedParentGroupId = ref<string | undefined>(undefined)
 const dragOverIndex = ref<number | null>(null)
 const dragPosition = ref<'top' | 'bottom' | null>(null)
 const expandedGroupIds = ref<string[]>([])
@@ -80,9 +83,11 @@ const reversedElements = computed(() => {
 })
 
 // 拖拽处理
-const handleDragStart = (index: number, e: DragEvent) => {
+const handleDragStart = (index: number, e: DragEvent, elementId: string, parentGroupId?: string) => {
   if (e.dataTransfer) {
     draggedIndex.value = index
+    draggedElementId.value = elementId
+    draggedParentGroupId.value = parentGroupId
     e.dataTransfer.effectAllowed = 'move'
   }
 }
@@ -105,30 +110,67 @@ const handleDragOver = (index: number, e: DragEvent) => {
   dragPosition.value = e.clientY < midY ? 'top' : 'bottom'
 }
 
-const handleDrop = (index: number, e: DragEvent) => {
+const handleDrop = (index: number, e: DragEvent, targetParentGroupId?: string) => {
   e.preventDefault()
   
   if (draggedIndex.value !== null && draggedIndex.value !== index) {
-    // 简化处理：仅支持顶层排序
-    // 注意：嵌套拖拽需要更复杂的逻辑（判断目标是否在组内，计算新父级等）
-    // 当前版本只支持根层级排序
+    // 检查是否在同一个父级内拖动
+    const sameParent = draggedParentGroupId.value === targetParentGroupId
     
-    const len = props.elements.length
-    const uiFrom = draggedIndex.value
-    const uiTo = index
-    
-    const realFrom = len - 1 - uiFrom
-    let uiTargetIndex = uiTo
-    if (dragPosition.value === 'bottom') {
-      uiTargetIndex += 1
-    }
-    let realTo = len - uiTargetIndex
-    
-    if (realTo > realFrom) {
-      realTo -= 1
+    if (!sameParent) {
+      // 暂不支持跨组拖动
+      console.warn('暂不支持跨组拖动元素')
+      handleDragEnd()
+      return
     }
     
-    emit('reorderElement', realFrom, realTo)
+    // 在同一个父级内重新排序
+    if (draggedParentGroupId.value) {
+      // 组内重新排序
+      const groupId = draggedParentGroupId.value
+      const uiFrom = draggedIndex.value
+      const uiTo = index
+      
+      // 找到这个组，计算其 children 的长度
+      const group = findGroupById(props.elements, groupId)
+      if (!group || group.type !== 'group') {
+        handleDragEnd()
+        return
+      }
+      
+      const len = group.children.length
+      const realFrom = len - 1 - uiFrom
+      
+      let uiTargetIndex = uiTo
+      if (dragPosition.value === 'bottom') {
+        uiTargetIndex += 1
+      }
+      let realTo = len - uiTargetIndex
+      
+      if (realTo > realFrom) {
+        realTo -= 1
+      }
+      
+      emit('reorderElementInGroup', groupId, realFrom, realTo)
+    } else {
+      // 根级重新排序
+      const len = props.elements.length
+      const uiFrom = draggedIndex.value
+      const uiTo = index
+      
+      const realFrom = len - 1 - uiFrom
+      let uiTargetIndex = uiTo
+      if (dragPosition.value === 'bottom') {
+        uiTargetIndex += 1
+      }
+      let realTo = len - uiTargetIndex
+      
+      if (realTo > realFrom) {
+        realTo -= 1
+      }
+      
+      emit('reorderElement', realFrom, realTo)
+    }
   }
   
   handleDragEnd()
@@ -136,8 +178,24 @@ const handleDrop = (index: number, e: DragEvent) => {
 
 const handleDragEnd = () => {
   draggedIndex.value = null
+  draggedElementId.value = null
+  draggedParentGroupId.value = undefined
   dragOverIndex.value = null
   dragPosition.value = null
+}
+
+// 递归查找组合元素
+const findGroupById = (list: CanvasElement[], groupId: string): CanvasElement | null => {
+  for (const el of list) {
+    if (el.id === groupId) {
+      return el
+    }
+    if (el.type === 'group') {
+      const found = findGroupById((el as GroupElement).children, groupId)
+      if (found) return found
+    }
+  }
+  return null
 }
 </script>
 

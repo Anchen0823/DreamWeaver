@@ -117,7 +117,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, toRef } from 'vue'
-import type { TextElement, ImageElement, ShapeElement, BrushElement, CanvasElement as CanvasElementType } from '../types/canvas'
+import type { TextElement, ImageElement, ShapeElement, BrushElement, GroupElement, CanvasElement as CanvasElementType } from '../types/canvas'
 import { useViewport } from '../composables/useViewport'
 import { useCanvasInteraction } from '../composables/useCanvasInteraction'
 import { useElementSelection } from '../composables/useElementSelection'
@@ -595,6 +595,43 @@ const reorderElement = (fromIndex: number, toIndex: number) => {
   elements.value = newElements
 }
 
+// 重新排序组合内的元素
+const reorderElementInGroup = (groupId: string, fromIndex: number, toIndex: number) => {
+  // 递归查找并更新组合
+  const reorderInList = (list: CanvasElementType[]): CanvasElementType[] => {
+    return list.map(el => {
+      if (el.id === groupId && el.type === 'group') {
+        const group = el as GroupElement
+        const children = [...group.children]
+        
+        if (fromIndex < 0 || fromIndex >= children.length || 
+            toIndex < 0 || toIndex > children.length || 
+            fromIndex === toIndex) {
+          return el
+        }
+        
+        const child = children[fromIndex]
+        children.splice(fromIndex, 1)
+        children.splice(toIndex, 0, child)
+        
+        return {
+          ...group,
+          children
+        }
+      } else if (el.type === 'group') {
+        const group = el as GroupElement
+        return {
+          ...group,
+          children: reorderInList(group.children)
+        }
+      }
+      return el
+    })
+  }
+  
+  elements.value = reorderInList(elements.value)
+}
+
 // 暴露方法供父组件调用
 defineExpose({
   addShape: elementCreation.addShape,
@@ -606,6 +643,7 @@ defineExpose({
   updateBrushColor,
   updateBrushStrokeWidth,
   reorderElement,
+  reorderElementInGroup,
   elements,
   selection
 })

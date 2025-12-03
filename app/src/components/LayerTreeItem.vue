@@ -67,19 +67,20 @@
           :element="child"
           :index="childIndex"
           :depth="depth + 1"
+          :parent-group-id="element.id"
           :selected-element-ids="selectedElementIds"
           :hovered-id="hoveredId"
           :dragged-index="draggedIndex"
           :drag-over-index="dragOverIndex"
           :drag-position="dragPosition"
           :expanded-group-ids="expandedGroupIds"
-          @select-element="$emit('selectElement', $event[0], $event[1])"
-          @hover-element="$emit('hoverElement', $event)"
-          @toggle-group="$emit('toggleGroup', $event)"
-          @drag-start="$emit('dragStart', $event[0], $event[1])"
-          @drag-over="$emit('dragOver', $event[0], $event[1])"
-          @drop="$emit('drop', $event[0], $event[1])"
-          @drag-end="$emit('dragEnd')"
+          @select-element="(id, ctrl) => $emit('selectElement', id, ctrl)"
+          @hover-element="(id) => $emit('hoverElement', id)"
+          @toggle-group="(id) => $emit('toggleGroup', id)"
+          @drag-start="(idx, e, elId, parentId) => $emit('dragStart', idx, e, elId, parentId)"
+          @drag-over="(idx, e) => $emit('dragOver', idx, e)"
+          @drop="(idx, e, parentId) => $emit('drop', idx, e, parentId)"
+          @drag-end="() => $emit('dragEnd')"
         />
       </div>
     </div>
@@ -143,19 +144,21 @@ interface Props {
   dragOverIndex: number | null
   dragPosition: 'top' | 'bottom' | null
   expandedGroupIds: string[]
+  parentGroupId?: string // 父组ID，用于识别是否在组内拖动
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  depth: 0
+  depth: 0,
+  parentGroupId: undefined
 })
 
 const emit = defineEmits<{
   selectElement: [elementId: string, ctrlKey: boolean]
   hoverElement: [elementId: string | null]
   toggleGroup: [groupId: string]
-  dragStart: [index: number, event: DragEvent]
+  dragStart: [index: number, event: DragEvent, elementId: string, parentGroupId?: string]
   dragOver: [index: number, event: DragEvent]
-  drop: [index: number, event: DragEvent]
+  drop: [index: number, event: DragEvent, parentGroupId?: string]
   dragEnd: []
 }>()
 
@@ -184,7 +187,7 @@ const toggleGroup = () => {
 }
 
 const handleDragStart = (e: DragEvent) => {
-  emit('dragStart', props.index, e)
+  emit('dragStart', props.index, e, props.element.id, props.parentGroupId)
 }
 
 const handleDragOver = (e: DragEvent) => {
@@ -196,7 +199,7 @@ const handleDragLeave = () => {
 }
 
 const handleDrop = (e: DragEvent) => {
-  emit('drop', props.index, e)
+  emit('drop', props.index, e, props.parentGroupId)
 }
 
 const handleDragEnd = () => {
