@@ -6,10 +6,24 @@ import LayersPanel from './components/LayersPanel.vue'
 
 const canvasRef = ref<InstanceType<typeof Canvas>>()
 const activeTool = ref<string | null>(null)
+const brushColor = ref('#ff6b6b')
+const brushStrokeWidth = ref(5)
 
 // 处理activeTool更新
 const handleActiveToolUpdate = (tool: string | null) => {
   activeTool.value = tool
+}
+
+// 处理画笔颜色变更
+const handleBrushColorChange = (color: string) => {
+  brushColor.value = color
+  canvasRef.value?.updateBrushColor(color)
+}
+
+// 处理画笔宽度变更
+const handleBrushStrokeWidthChange = (width: number) => {
+  brushStrokeWidth.value = width
+  canvasRef.value?.updateBrushStrokeWidth(width)
 }
 
 // 处理图片选择
@@ -61,8 +75,12 @@ const handleLayerSelect = (elementId: string, ctrlKey: boolean) => {
     </div>
     <Toolbar 
       :active-tool="activeTool"
+      :brush-color="brushColor"
+      :brush-stroke-width="brushStrokeWidth"
       @update:active-tool="handleActiveToolUpdate"
       @image-selected="handleImageSelected"
+      @brush-color-change="handleBrushColorChange"
+      @brush-stroke-width-change="handleBrushStrokeWidthChange"
     />
   </div>
 </template>

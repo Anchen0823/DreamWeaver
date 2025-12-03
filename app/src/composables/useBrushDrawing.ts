@@ -28,10 +28,11 @@ export function useBrushDrawing(
     }
 
     const halfStroke = strokeWidth / 2
-    let minX = points[0].x - halfStroke
-    let minY = points[0].y - halfStroke
-    let maxX = points[0].x + halfStroke
-    let maxY = points[0].y + halfStroke
+    const firstPoint = points[0]!
+    let minX = firstPoint.x - halfStroke
+    let minY = firstPoint.y - halfStroke
+    let maxX = firstPoint.x + halfStroke
+    let maxY = firstPoint.y + halfStroke
 
     for (const point of points) {
       minX = Math.min(minX, point.x - halfStroke)

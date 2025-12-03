@@ -117,6 +117,16 @@
       style="display: none"
       @change="handleFileSelect"
     />
+
+    <!-- 画笔工具栏（二级栏） -->
+    <BrushToolbar
+      v-if="activeTool === 'brush'"
+      :color="brushColor"
+      :stroke-width="brushStrokeWidth"
+      :visible="activeTool === 'brush'"
+      @update:color="handleBrushColorChange"
+      @update:stroke-width="handleBrushStrokeWidthChange"
+    />
   </div>
 </template>
 
@@ -131,15 +141,20 @@ import TriangleIcon from './icons/TriangleIcon.vue'
 import ImageIcon from './icons/ImageIcon.vue'
 import TextIcon from './icons/TextIcon.vue'
 import BrushIcon from './icons/BrushIcon.vue'
+import BrushToolbar from './BrushToolbar.vue'
 
 // 定义props和事件
 const props = defineProps<{
   activeTool?: string | null
+  brushColor?: string
+  brushStrokeWidth?: number
 }>()
 
 const emit = defineEmits<{
   'update:activeTool': [tool: string | null]
   'image-selected': [src: string, width: number, height: number]
+  'brush-color-change': [color: string]
+  'brush-stroke-width-change': [width: number]
 }>()
 
 const fileInputRef = ref<HTMLInputElement>()
@@ -225,6 +240,16 @@ const handleSelectBrush = () => {
   } else {
     emit('update:activeTool', 'brush')
   }
+}
+
+// 处理画笔颜色变更
+const handleBrushColorChange = (color: string) => {
+  emit('brush-color-change', color)
+}
+
+// 处理画笔宽度变更
+const handleBrushStrokeWidthChange = (width: number) => {
+  emit('brush-stroke-width-change', width)
 }
 </script>
 

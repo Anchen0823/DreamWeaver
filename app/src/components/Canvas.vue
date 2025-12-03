@@ -94,6 +94,17 @@
         @update:border-radius="handleShapePropertyUpdate('borderRadius', $event)"
       />
       
+      <!-- 画笔元素浮动工具栏 -->
+      <BrushElementToolbar
+        v-if="selectedBrushElement"
+        :brush-element="selectedBrushElement"
+        :visible="!!selectedBrushElement"
+        :position="brushElementToolbarPosition"
+        :scale="viewport.scale.value"
+        @update:color="handleBrushElementPropertyUpdate('color', $event)"
+        @update:stroke-width="handleBrushElementPropertyUpdate('strokeWidth', $event)"
+      />
+      
       <!-- 绘制预览 -->
       <CanvasPreview
         :drawing="drawing"
@@ -106,7 +117,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, toRef } from 'vue'
-import type { TextElement, ImageElement, ShapeElement, CanvasElement as CanvasElementType } from '../types/canvas'
+import type { TextElement, ImageElement, ShapeElement, BrushElement, CanvasElement as CanvasElementType } from '../types/canvas'
 import { useViewport } from '../composables/useViewport'
 import { useCanvasInteraction } from '../composables/useCanvasInteraction'
 import { useElementSelection } from '../composables/useElementSelection'
@@ -124,6 +135,7 @@ import { mockElements } from '../utils/mock-data'
 import TextToolbar from './TextToolbar.vue'
 import ImageToolbar from './ImageToolbar.vue'
 import ShapeToolbar from './ShapeToolbar.vue'
+import BrushElementToolbar from './BrushElementToolbar.vue'
 import CanvasElement from './CanvasElement.vue'
 import CanvasSelection from './CanvasSelection.vue'
 import CanvasPreview from './CanvasPreview.vue'
@@ -206,6 +218,16 @@ const selectedShapeElement = computed<ShapeElement | null>(() => {
     : null
 })
 
+// 选中的画笔元素（单选且为画笔类型时）
+const selectedBrushElement = computed<BrushElement | null>(() => {
+  if (selection.selectedElementIds.value.length !== 1) {
+    return null
+  }
+  const elementId = selection.selectedElementIds.value[0]
+  const element = elements.value.find(el => el.id === elementId)
+  return element && element.type === 'brush' ? (element as BrushElement) : null
+})
+
 // 文本工具栏位置（使用画布坐标系，与选中框一致）
 const textToolbarPosition = computed(() => {
   const selectedText = textEditing.selectedTextElement.value
@@ -250,6 +272,24 @@ const shapeToolbarPosition = computed(() => {
   }
   
   const element = selectedShape
+  
+  // 使用画布坐标系，与选中框的计算方式一致
+  // 位置会通过 .canvas 的 transform 自动应用视口偏移和缩放
+  // 工具栏显示在元素上方居中，偏移量需要考虑 zoom（因为 .canvas 有 scale(zoom)）
+  const toolbarX = element.x * viewport.scale.value + (element.width * viewport.scale.value) / 2
+  const toolbarY = element.y * viewport.scale.value - 70 / viewport.zoom.value // 元素上方 70px（屏幕像素），需要除以 zoom 转换为画布坐标
+  
+  return { x: toolbarX, y: toolbarY }
+})
+
+// 画笔元素工具栏位置（使用画布坐标系，与选中框一致）
+const brushElementToolbarPosition = computed(() => {
+  const selectedBrush = selectedBrushElement.value
+  if (!selectedBrush) {
+    return { x: 0, y: 0 }
+  }
+  
+  const element = selectedBrush
   
   // 使用画布坐标系，与选中框的计算方式一致
   // 位置会通过 .canvas 的 transform 自动应用视口偏移和缩放
@@ -380,6 +420,70 @@ const handleShapePropertyUpdate = (property: string, value: any) => {
   elements.value = newElements
 }
 
+// 处理画笔元素属性更新
+const handleBrushElementPropertyUpdate = (property: string, value: any) => {
+  const selectedBrush = selectedBrushElement.value
+  if (!selectedBrush) {
+    return
+  }
+  
+  const elementId = selectedBrush.id
+  const elementIndex = elements.value.findIndex(el => el.id === elementId)
+  if (elementIndex === -1) {
+    return
+  }
+  
+  const element = elements.value[elementIndex] as BrushElement
+  if (element.type !== 'brush') {
+    return
+  }
+  
+  // 创建新数组以确保响应式更新
+  const newElements = [...elements.value]
+  const updatedElement = { ...newElements[elementIndex] } as BrushElement
+  
+  // 更新属性
+  ;(updatedElement as any)[property] = value
+  
+  // 如果更新的是 strokeWidth，需要重新计算边界框
+  if (property === 'strokeWidth' && updatedElement.points.length > 0) {
+    // 重新计算边界框
+    const halfStroke = value / 2
+    const firstPoint = updatedElement.points[0]!
+    let minX = firstPoint.x - halfStroke
+    let minY = firstPoint.y - halfStroke
+    let maxX = firstPoint.x + halfStroke
+    let maxY = firstPoint.y + halfStroke
+
+    for (const point of updatedElement.points) {
+      minX = Math.min(minX, point.x - halfStroke)
+      minY = Math.min(minY, point.y - halfStroke)
+      maxX = Math.max(maxX, point.x + halfStroke)
+      maxY = Math.max(maxY, point.y + halfStroke)
+    }
+    
+    // 更新元素位置和尺寸
+    const currentX = updatedElement.x
+    const currentY = updatedElement.y
+    updatedElement.x = currentX + minX
+    updatedElement.y = currentY + minY
+    updatedElement.width = maxX - minX
+    updatedElement.height = maxY - minY
+    
+    // 调整所有点的坐标，使其相对于新的左上角
+    const offsetX = minX
+    const offsetY = minY
+    updatedElement.points = updatedElement.points.map(p => ({
+      x: p.x - offsetX,
+      y: p.y - offsetY
+    }))
+  }
+  
+  // 替换元素
+  newElements[elementIndex] = updatedElement
+  elements.value = newElements
+}
+
 // 事件处理
 const events = useCanvasEvents(
   containerRef,
@@ -412,6 +516,10 @@ watch(() => props.activeTool, (newTool) => {
     drawing.pendingImageData.value = null
   }
 })
+
+// 暴露画笔属性供外部访问
+const getBrushColor = () => brushDrawing.defaultColor.value
+const getBrushStrokeWidth = () => brushDrawing.defaultStrokeWidth.value
 
 // 监听选中状态变化，当取消选中时检查并删除空的新创建文本元素
 watch(() => selection.selectedElementIds.value, (newIds, oldIds) => {
@@ -447,12 +555,24 @@ const addText = async () => {
   }
 }
 
+// 更新画笔颜色
+const updateBrushColor = (color: string) => {
+  brushDrawing.setColor(color)
+}
+
+// 更新画笔宽度
+const updateBrushStrokeWidth = (width: number) => {
+  brushDrawing.setStrokeWidth(width)
+}
+
 // 暴露方法供父组件调用
 defineExpose({
   addShape: elementCreation.addShape,
   addImage: elementCreation.addImage,
   addText,
   handleImageSelected,
+  updateBrushColor,
+  updateBrushStrokeWidth,
   elements,
   selection
 })
