@@ -49,11 +49,76 @@
     <!-- 组合元素 -->
     <template v-else-if="element.type === 'group'">
       <div class="thumbnail-group">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="4" y="4" width="7" height="7" rx="1" stroke="currentColor" />
-          <rect x="13" y="4" width="7" height="7" rx="1" stroke="currentColor" />
-          <rect x="4" y="13" width="7" height="7" rx="1" stroke="currentColor" />
-          <rect x="13" y="13" width="7" height="7" rx="1" stroke="currentColor" />
+        <svg 
+          :style="groupSvgStyle"
+          viewBox="0 0 40 40" 
+          fill="none" 
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <!-- 背景边框 -->
+          <rect 
+            x="2" 
+            y="2" 
+            width="36" 
+            height="36" 
+            rx="2" 
+            stroke="#ddd" 
+            stroke-width="1" 
+            fill="none"
+            stroke-dasharray="2 2"
+          />
+          
+          <!-- 显示组内前几个元素的简化形状 -->
+          <template v-for="(child, idx) in getGroupPreviewChildren(element as GroupElement)" :key="idx">
+            <rect
+              v-if="isShapeElement(child)"
+              :x="8 + idx * 3"
+              :y="8 + idx * 3"
+              :width="20 - idx * 2"
+              :height="20 - idx * 2"
+              :rx="child.type === 'circle' ? '50%' : (child.type === 'rounded-rectangle' ? '2' : '0')"
+              :fill="getChildColor(child)"
+              :stroke="getChildBorderColor(child)"
+              stroke-width="0.5"
+              opacity="0.8"
+            />
+            <circle
+              v-else-if="child.type === 'circle'"
+              :cx="18 + idx * 3"
+              :cy="18 + idx * 3"
+              :r="10 - idx"
+              :fill="getChildColor(child)"
+              :stroke="getChildBorderColor(child)"
+              stroke-width="0.5"
+              opacity="0.8"
+            />
+            <text
+              v-else-if="child.type === 'text'"
+              :x="10 + idx * 3"
+              :y="18 + idx * 3"
+              font-size="8"
+              fill="#666"
+              opacity="0.8"
+            >T</text>
+            <rect
+              v-else
+              :x="10 + idx * 3"
+              :y="10 + idx * 3"
+              :width="16 - idx * 2"
+              :height="16 - idx * 2"
+              rx="1"
+              fill="#e0e0e0"
+              stroke="#999"
+              stroke-width="0.5"
+              opacity="0.7"
+            />
+          </template>
+          
+          <!-- 组合图标标识 -->
+          <g transform="translate(26, 26)">
+            <circle cx="6" cy="6" r="6" fill="white" stroke="#0066ff" stroke-width="1"/>
+            <path d="M3 6h6M6 3v6" stroke="#0066ff" stroke-width="1.5" stroke-linecap="round"/>
+          </g>
         </svg>
       </div>
     </template>
@@ -75,6 +140,42 @@ const isShape = computed(() => {
          props.element.type === 'rounded-rectangle' || 
          props.element.type === 'circle' || 
          props.element.type === 'triangle'
+})
+
+// 获取组合预览的子元素（最多显示3个）
+const getGroupPreviewChildren = (group: GroupElement) => {
+  return group.children.slice(0, 3)
+}
+
+// 判断是否是图形元素
+const isShapeElement = (el: CanvasElement) => {
+  return el.type === 'rectangle' || 
+         el.type === 'rounded-rectangle' || 
+         el.type === 'circle' || 
+         el.type === 'triangle'
+}
+
+// 获取子元素颜色
+const getChildColor = (el: CanvasElement) => {
+  if (isShapeElement(el)) {
+    return (el as ShapeElement).backgroundColor || '#e0e0e0'
+  }
+  return '#e0e0e0'
+}
+
+// 获取子元素边框颜色
+const getChildBorderColor = (el: CanvasElement) => {
+  if (isShapeElement(el)) {
+    return (el as ShapeElement).borderColor || '#999'
+  }
+  return '#999'
+}
+
+const groupSvgStyle = computed(() => {
+  return {
+    width: '40px',
+    height: '40px'
+  }
 })
 
 // 计算图形样式

@@ -120,42 +120,92 @@ export function useElementGrouping(
     const selectedIds = selection.selectedElementIds.value
     if (selectedIds.length === 0) return
 
-    const newElements = [...elements.value]
-    const newSelectedIds: string[] = []
-    let hasChanges = false
+    // 递归解组函数
+    // 如果列表中的元素被选中且是 Group，则展开它
+    // 如果 Group 没被选中，但包含了被选中的子 Group，则需要进入递归
+    // 注意：目前的选中逻辑是“选中了组，就等于选中了组ID”。不会单独选中子元素ID。
+    // 所以如果是“选中顶层组”，则只解散这一层。
+    // 如果要支持解散深层组，则需要 UI 支持选中深层组。
+    // 假设 selectedIds 包含了需要解散的组的 ID（无论层级）。
 
-    // 我们需要处理可能选中了多个组合的情况
-    // 使用 for 循环并小心处理索引，或者构建新列表
-    
-    // 策略：构建一个新的列表，遍历原列表，遇到选中的 Group 就展开，否则保留
-    const resultElements: CanvasElement[] = []
-    
-    elements.value.forEach(el => {
-      if (selectedIds.includes(el.id) && el.type === 'group') {
-        const group = el as GroupElement
-        hasChanges = true
-        
-        // 转换子元素坐标为世界坐标
-        const children = group.children.map(child => {
-          const newChild = JSON.parse(JSON.stringify(child)) as CanvasElement
-          newChild.x = newChild.x + group.x
-          newChild.y = newChild.y + group.y
-          // 收集 ID 以便解组后保持选中
-          newSelectedIds.push(newChild.id)
-          return newChild
-        })
-        
-        resultElements.push(...children)
-      } else {
-        resultElements.push(el)
-        if (selectedIds.includes(el.id)) {
-          newSelectedIds.push(el.id)
+    let hasChanges = false
+    const newSelectedIds: string[] = []
+
+    const processList = (list: CanvasElement[]): CanvasElement[] => {
+      const result: CanvasElement[] = []
+      
+      for (const el of list) {
+        if (selectedIds.includes(el.id) && el.type === 'group') {
+          // 这是一个需要解散的组
+          hasChanges = true
+          const group = el as GroupElement
+          
+          // 转换子元素坐标为相对父级（如果有）的坐标
+          // 注意：这里的 processList 是处理当前层级的。
+          // group.children 的坐标是相对于 group 的。
+          // 当 group 被解散，children 的坐标变为相对于 group 的父级（或世界）。
+          // 所以 newChild.x = child.x + group.x
+          
+          const children = group.children.map(child => {
+            const newChild = JSON.parse(JSON.stringify(child)) as CanvasElement
+            newChild.x = newChild.x + group.x
+            newChild.y = newChild.y + group.y
+            
+            // 保持子元素选中状态
+            // 或者是让解散出来的子元素被选中？通常是后者。
+            newSelectedIds.push(newChild.id)
+            return newChild
+          })
+          
+          // 递归处理子元素（如果子元素也是组且被选中，或者是普通元素）
+          // 但这里我们已经解散了当前组，children 现在变成了当前层级的元素。
+          // 是否需要继续解散 children 中的组？
+          // 如果用户选中了父组，通常只解散父组。
+          // 如果用户同时选中了父组和子组（在支持多选的层级视图中），那么应该解散两层。
+          // 但如果 selectedIds 只包含父组 ID，子组 ID 不在其中，就不解散子组。
+          // 我们这里递归调用 processList 处理 children，以支持多层解散。
+          
+          result.push(...processList(children))
+          
+        } else if (el.type === 'group') {
+          // 这是一个不需要解散的组，但可能内部包含需要解散的组
+          const group = el as GroupElement
+          const processedChildren = processList(group.children)
+          
+          // 如果子元素有变化，我们需要创建一个新的 group 对象
+          // 简单的判断 processedChildren !== group.children
+          // 由于我们每次都返回新数组，这里可能需要更精确的 hasChanges 标志
+          // 或者我们在 processList 外部控制。
+          // 只要进入了 processList 并且发生了操作，hasChanges 就会为 true。
+          
+          // 如果这个组本身没变（children 也没变），我们应该保留引用？
+          // 为了简单，我们重建对象。
+          
+          const newGroup: GroupElement = {
+            ...group,
+            children: processedChildren
+          }
+          
+          result.push(newGroup)
+          
+          if (selectedIds.includes(el.id)) {
+            newSelectedIds.push(el.id)
+          }
+        } else {
+          result.push(el)
+          if (selectedIds.includes(el.id)) {
+            newSelectedIds.push(el.id)
+          }
         }
       }
-    })
+      
+      return result
+    }
+
+    const newElements = processList(elements.value)
 
     if (hasChanges) {
-      elements.value = resultElements
+      elements.value = newElements
       selection.selectedElementIds.value = newSelectedIds
     }
   }
