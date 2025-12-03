@@ -27,12 +27,30 @@
         {{ getTextPreview(element as TextElement) }}
       </div>
     </template>
+    
+    <!-- 画笔元素缩略图 -->
+    <template v-else-if="element.type === 'brush'">
+      <svg
+        :style="brushSvgStyle"
+        class="thumbnail-brush"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          :d="brushPath"
+          :stroke="brushColor"
+          :stroke-width="brushStrokeWidth"
+          :stroke-linecap="brushLineCap"
+          :stroke-linejoin="brushLineJoin"
+          fill="none"
+        />
+      </svg>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { CanvasElement, ShapeElement, ImageElement, TextElement } from '../types/canvas'
+import type { CanvasElement, ShapeElement, ImageElement, TextElement, BrushElement } from '../types/canvas'
 
 interface Props {
   element: CanvasElement
@@ -122,6 +140,74 @@ const getTextPreview = (text: TextElement): string => {
   // 只显示前几个字符
   return text.content.substring(0, 10) + (text.content.length > 10 ? '...' : '')
 }
+
+// 画笔元素相关计算属性
+const brushElement = computed(() => {
+  if (props.element.type !== 'brush') return null
+  return props.element as BrushElement
+})
+
+const brushPath = computed(() => {
+  if (!brushElement.value || brushElement.value.points.length === 0) {
+    return ''
+  }
+  
+  const points = brushElement.value.points
+  const maxSize = 40
+  const scale = Math.min(maxSize / props.element.width, maxSize / props.element.height, 1)
+  
+  if (points.length === 1) {
+    // 单个点，绘制一个小圆
+    const scaledWidth = brushElement.value.strokeWidth * scale
+    return `M ${points[0].x * scale} ${points[0].y * scale} m -${scaledWidth / 2}, 0 a ${scaledWidth / 2},${scaledWidth / 2} 0 1,0 ${scaledWidth},0 a ${scaledWidth / 2},${scaledWidth / 2} 0 1,0 -${scaledWidth},0`
+  }
+  
+  // 多个点，使用路径连接
+  let path = `M ${points[0].x * scale} ${points[0].y * scale}`
+  for (let i = 1; i < points.length; i++) {
+    path += ` L ${points[i].x * scale} ${points[i].y * scale}`
+  }
+  
+  return path
+})
+
+const brushColor = computed(() => {
+  return brushElement.value?.color || '#ff6b6b'
+})
+
+const brushStrokeWidth = computed(() => {
+  if (!brushElement.value) return 2
+  const maxSize = 40
+  const scale = Math.min(maxSize / props.element.width, maxSize / props.element.height, 1)
+  return Math.max(1, brushElement.value.strokeWidth * scale)
+})
+
+const brushLineCap = computed(() => {
+  return brushElement.value?.lineCap || 'round'
+})
+
+const brushLineJoin = computed(() => {
+  return brushElement.value?.lineJoin || 'round'
+})
+
+const brushSvgStyle = computed(() => {
+  const maxSize = 40
+  const aspectRatio = props.element.width / props.element.height
+  
+  let width = maxSize
+  let height = maxSize
+  
+  if (aspectRatio > 1) {
+    height = maxSize / aspectRatio
+  } else {
+    width = maxSize * aspectRatio
+  }
+  
+  return {
+    width: `${width}px`,
+    height: `${height}px`
+  }
+})
 </script>
 
 <style scoped>
@@ -166,6 +252,10 @@ const getTextPreview = (text: TextElement): string => {
   overflow: hidden;
   text-overflow: ellipsis;
   box-sizing: border-box;
+}
+
+.thumbnail-brush {
+  display: block;
 }
 </style>
 

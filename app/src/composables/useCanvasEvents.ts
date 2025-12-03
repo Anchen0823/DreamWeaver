@@ -48,19 +48,45 @@ export function useCanvasEvents(
       return
     }
     
-    // 如果点击的是元素，不触发绘制或框选
+    // 如果点击的是文本工具栏，不触发框选或绘制
     const target = e.target as HTMLElement
+    if (target.closest('.text-toolbar') || target.closest('.shape-toolbar') || target.closest('.image-toolbar')) {
+      return
+    }
+
+    // 获取当前激活的工具
+    const tool = activeTool.value
+    
+    // 处理画笔工具（画笔模式下，即使点击元素也可以绘制）
+    if (tool === 'brush' && brushDrawing) {
+      if (e.button === 0) {
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+        
+        // 转换为画布坐标
+        const canvasPos = screenToCanvas(
+          e.clientX,
+          e.clientY,
+          rect,
+          viewport.viewportOffsetX.value,
+          viewport.viewportOffsetY.value,
+          viewport.zoom.value,
+          viewport.scale.value
+        )
+        
+        // 开始画笔绘制（即使点击的是元素也可以绘制）
+        brushDrawing.startDrawing(canvasPos)
+        
+        e.preventDefault()
+        return
+      }
+    }
+
+    // 如果点击的是元素，不触发绘制或框选（画笔工具除外，已在上面处理）
     if (target.closest('.element') && !target.closest('.preview')) {
       return
     }
 
-    // 如果点击的是文本工具栏，不触发框选
-    if (target.closest('.text-toolbar')) {
-      return
-    }
-
     // 如果有激活的工具，开始绘制
-    const tool = activeTool.value
     if (tool && (tool === 'rectangle' || tool === 'rounded-rectangle' || tool === 'circle' || tool === 'triangle' || tool === 'text' || tool === 'image')) {
       if (e.button === 0) {
         // 图片工具需要先选择图片
@@ -84,30 +110,6 @@ export function useCanvasEvents(
         
         // 开始绘制
         drawing.startDrawing(tool, canvasPos, drawing.pendingImageData.value)
-        
-        e.preventDefault()
-        return
-      }
-    }
-
-    // 处理画笔工具
-    if (tool === 'brush' && brushDrawing) {
-      if (e.button === 0) {
-        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-        
-        // 转换为画布坐标
-        const canvasPos = screenToCanvas(
-          e.clientX,
-          e.clientY,
-          rect,
-          viewport.viewportOffsetX.value,
-          viewport.viewportOffsetY.value,
-          viewport.zoom.value,
-          viewport.scale.value
-        )
-        
-        // 开始画笔绘制
-        brushDrawing.startDrawing(canvasPos)
         
         e.preventDefault()
         return
@@ -228,10 +230,8 @@ export function useCanvasEvents(
       
       if (e && newElement) {
         elements.value.push(newElement)
-        // 选中新创建的画笔元素
-        selection.selectedElementIds.value = [newElement.id]
-        // 绘制完成后，自动切换回move状态（取消工具选择）
-        onToolChange(null)
+        // 画笔绘制完成后，保持画笔模式，不选中元素，不切换工具
+        // 这样用户可以连续绘制多笔
       }
       
       if (e) {

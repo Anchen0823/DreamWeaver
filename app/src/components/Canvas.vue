@@ -32,6 +32,7 @@
         :scale="viewport.scale.value"
         :is-selected="selection.isElementSelected(element.id)"
         :is-editing="textEditing.editingTextElementId.value === element.id"
+        :active-tool="props.activeTool"
         @element-mouse-down="handleElementMouseDown"
         @text-double-click="textEditing.handleTextDoubleClick"
         @text-edit-input="textEditing.handleTextEditInput"
@@ -295,6 +296,11 @@ const handleElementMouseDown = (elementId: string, e: MouseEvent) => {
   const target = e.target as HTMLElement
   if (target.closest('.resize-handle')) {
     // 调整大小的处理在 CanvasSelection 组件中
+    return
+  }
+  
+  // 如果是画笔模式，不处理元素选择，允许在元素上绘制
+  if (props.activeTool === 'brush') {
     return
   }
   

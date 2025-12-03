@@ -2,7 +2,7 @@
   <div
     :class="['element', element.type, { 'selected': isSelected }]"
     :style="elementStyle"
-    @mousedown.stop="$emit('elementMouseDown', element.id, $event)"
+    @mousedown="handleMouseDown"
   >
     <!-- 图形元素 -->
     <template v-if="isShape">
@@ -75,6 +75,7 @@ interface Props {
   scale: number
   isSelected: boolean
   isEditing: boolean
+  activeTool?: string | null
 }
 
 const props = defineProps<Props>()
@@ -196,6 +197,20 @@ const brushSvgStyle = computed(() => {
     pointerEvents: 'none'
   }
 })
+
+// 处理鼠标按下事件
+const handleMouseDown = (e: MouseEvent) => {
+  // 如果是画笔模式，不阻止事件传播，让事件冒泡到容器以便在元素上绘制
+  if (props.activeTool === 'brush') {
+    // 不调用 stopPropagation，让事件继续冒泡到容器
+    // 这样可以从元素框内起笔
+    return
+  }
+  
+  // 其他模式下阻止事件冒泡并正常处理
+  e.stopPropagation()
+  emit('elementMouseDown', props.element.id, e)
+}
 </script>
 
 <style scoped>

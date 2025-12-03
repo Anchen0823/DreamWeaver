@@ -70,7 +70,8 @@ const getElementName = (element: CanvasElement, index: number): string => {
     'circle': '圆形',
     'triangle': '三角形',
     'image': '图片',
-    'text': '文本'
+    'text': '文本',
+    'brush': '画笔'
   }
   
   const baseName = typeNames[element.type] || '元素'
@@ -87,7 +88,8 @@ const getElementTypeLabel = (type: string): string => {
     'circle': 'Circle',
     'triangle': 'Triangle',
     'image': 'Image',
-    'text': 'Text'
+    'text': 'Text',
+    'brush': 'Brush'
   }
   return labels[type] || type
 }
