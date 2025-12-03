@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import Canvas from './components/Canvas.vue'
 import Toolbar from './components/Toolbar.vue'
 import LayersPanel from './components/LayersPanel.vue'
@@ -8,6 +8,30 @@ const canvasRef = ref<InstanceType<typeof Canvas>>()
 const activeTool = ref<string | null>(null)
 const brushColor = ref('#ff6b6b')
 const brushStrokeWidth = ref(5)
+
+// 处理快捷键
+const handleKeyDown = (e: KeyboardEvent) => {
+  if (e.ctrlKey || e.metaKey) {
+    if (e.key === 'e') { // 改为 Ctrl+E 组合
+      e.preventDefault()
+      if (e.shiftKey) {
+        // Ctrl+Shift+E: 解组
+        canvasRef.value?.ungroupElements()
+      } else {
+        // Ctrl+E: 组合
+        canvasRef.value?.groupElements()
+      }
+    }
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleKeyDown)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeyDown)
+})
 
 // 处理activeTool更新
 const handleActiveToolUpdate = (tool: string | null) => {

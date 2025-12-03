@@ -4,37 +4,113 @@
       <h3 class="layers-title">图层</h3>
     </div>
     <div class="layers-list">
-      <div
-        v-for="(element, index) in reversedElements"
-        :key="element.id"
-        class="layer-item"
-        :class="{ 
-          'selected': isSelected(element.id), 
-          'hover': hoveredId === element.id,
-          'drag-over-top': dragOverIndex === index && dragPosition === 'top',
-          'drag-over-bottom': dragOverIndex === index && dragPosition === 'bottom',
-          'is-dragging': draggedIndex === index
-        }"
-        draggable="true"
-        @click.stop="handleLayerClick(element.id, $event)"
-        @mouseenter="hoveredId = element.id"
-        @mouseleave="hoveredId = null"
-        @dragstart="handleDragStart(index, $event)"
-        @dragover="handleDragOver(index, $event)"
-        @dragleave="handleDragLeave"
-        @drop="handleDrop(index, $event)"
-        @dragend="handleDragEnd"
-      >
-        <div class="layer-thumbnail">
-          <div class="thumbnail-content" :style="getThumbnailStyle(element)">
-            <LayerThumbnail :element="element" />
+      <template v-for="(element, index) in reversedElements" :key="element.id">
+        <!-- 组合元素 -->
+        <div 
+          v-if="element.type === 'group'"
+          class="layer-group"
+        >
+          <div
+            class="layer-item group-header"
+            :class="{ 
+              'selected': isSelected(element.id), 
+              'hover': hoveredId === element.id,
+              'drag-over-top': dragOverIndex === index && dragPosition === 'top',
+              'drag-over-bottom': dragOverIndex === index && dragPosition === 'bottom',
+              'is-dragging': draggedIndex === index
+            }"
+            draggable="true"
+            @click.stop="handleLayerClick(element.id, $event)"
+            @mouseenter="hoveredId = element.id"
+            @mouseleave="hoveredId = null"
+            @dragstart="handleDragStart(index, $event)"
+            @dragover="handleDragOver(index, $event)"
+            @dragleave="handleDragLeave"
+            @drop="handleDrop(index, $event)"
+            @dragend="handleDragEnd"
+          >
+            <!-- 展开/折叠图标 -->
+            <div 
+              class="group-toggle"
+              @click.stop="toggleGroup(element.id)"
+            >
+              <svg 
+                class="toggle-icon" 
+                :class="{ 'expanded': isGroupExpanded(element.id) }"
+                width="12" 
+                height="12" 
+                viewBox="0 0 12 12" 
+                fill="none"
+              >
+                <path d="M4 2L8 6L4 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+            
+            <div class="layer-thumbnail">
+              <div class="thumbnail-content" :style="getThumbnailStyle(element)">
+                <LayerThumbnail :element="element" />
+              </div>
+            </div>
+            <div class="layer-info">
+              <div class="layer-name">{{ getElementName(element, index) }}</div>
+              <div class="layer-type">Group</div>
+            </div>
+          </div>
+          
+          <!-- 组内元素列表（仅在展开时显示） -->
+          <div v-if="isGroupExpanded(element.id)" class="group-children">
+            <div
+              v-for="(child, childIndex) in getReversedChildren(element)"
+              :key="child.id"
+              class="layer-item child-item"
+              :class="{ 'selected': isSelected(child.id) }"
+              @click.stop="handleLayerClick(child.id, $event)"
+            >
+              <div class="layer-thumbnail small">
+                <div class="thumbnail-content" :style="getThumbnailStyle(child)">
+                  <LayerThumbnail :element="child" />
+                </div>
+              </div>
+              <div class="layer-info">
+                <div class="layer-name">{{ getElementName(child, childIndex) }}</div>
+                <div class="layer-type">{{ getElementTypeLabel(child.type) }}</div>
+              </div>
+            </div>
           </div>
         </div>
-        <div class="layer-info">
-          <div class="layer-name">{{ getElementName(element, index) }}</div>
-          <div class="layer-type">{{ getElementTypeLabel(element.type) }}</div>
+        
+        <!-- 普通元素 -->
+        <div
+          v-else
+          class="layer-item"
+          :class="{ 
+            'selected': isSelected(element.id), 
+            'hover': hoveredId === element.id,
+            'drag-over-top': dragOverIndex === index && dragPosition === 'top',
+            'drag-over-bottom': dragOverIndex === index && dragPosition === 'bottom',
+            'is-dragging': draggedIndex === index
+          }"
+          draggable="true"
+          @click.stop="handleLayerClick(element.id, $event)"
+          @mouseenter="hoveredId = element.id"
+          @mouseleave="hoveredId = null"
+          @dragstart="handleDragStart(index, $event)"
+          @dragover="handleDragOver(index, $event)"
+          @dragleave="handleDragLeave"
+          @drop="handleDrop(index, $event)"
+          @dragend="handleDragEnd"
+        >
+          <div class="layer-thumbnail">
+            <div class="thumbnail-content" :style="getThumbnailStyle(element)">
+              <LayerThumbnail :element="element" />
+            </div>
+          </div>
+          <div class="layer-info">
+            <div class="layer-name">{{ getElementName(element, index) }}</div>
+            <div class="layer-type">{{ getElementTypeLabel(element.type) }}</div>
+          </div>
         </div>
-      </div>
+      </template>
       <div v-if="elements.length === 0" class="empty-state">
         <div class="empty-text">暂无元素</div>
       </div>
@@ -44,7 +120,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import type { CanvasElement, ShapeElement, ImageElement, TextElement } from '../types/canvas'
+import type { CanvasElement, ShapeElement, ImageElement, TextElement, GroupElement } from '../types/canvas'
 import LayerThumbnail from './LayerThumbnail.vue'
 
 interface Props {
@@ -63,6 +139,27 @@ const hoveredId = ref<string | null>(null)
 const draggedIndex = ref<number | null>(null)
 const dragOverIndex = ref<number | null>(null)
 const dragPosition = ref<'top' | 'bottom' | null>(null)
+const expandedGroupIds = ref<string[]>([])
+
+// 切换组合展开状态
+const toggleGroup = (groupId: string) => {
+  const index = expandedGroupIds.value.indexOf(groupId)
+  if (index > -1) {
+    expandedGroupIds.value.splice(index, 1)
+  } else {
+    expandedGroupIds.value.push(groupId)
+  }
+}
+
+const isGroupExpanded = (groupId: string) => {
+  return expandedGroupIds.value.includes(groupId)
+}
+
+// 获取组合的子元素（反转顺序显示）
+const getReversedChildren = (group: CanvasElement) => {
+  if (group.type !== 'group') return []
+  return [...(group as GroupElement).children].reverse()
+}
 
 // 反转元素列表，使最新的元素显示在顶部（类似 Figma）
 const reversedElements = computed(() => {
@@ -441,6 +538,58 @@ const getThumbnailStyle = (element: CanvasElement) => {
 
 .layer-item.drag-over-bottom {
   border-bottom: 2px solid #0066ff;
+}
+
+.layer-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.group-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.group-toggle {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 4px;
+  cursor: pointer;
+  color: #666;
+  border-radius: 4px;
+}
+
+.group-toggle:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.toggle-icon {
+  transition: transform 0.2s ease;
+}
+
+.toggle-icon.expanded {
+  transform: rotate(90deg);
+}
+
+.group-children {
+  background: #fafafa;
+  border-left: 2px solid #f0f0f0;
+  margin-left: 12px;
+}
+
+.child-item {
+  padding-left: 24px !important;
+}
+
+.layer-thumbnail.small {
+  width: 32px;
+  height: 32px;
 }
 </style>
 

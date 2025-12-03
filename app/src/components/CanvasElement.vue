@@ -62,12 +62,28 @@
         />
       </svg>
     </template>
+    
+    <!-- 组合元素（递归渲染） -->
+    <template v-else-if="element.type === 'group'">
+      <div class="group-content">
+        <CanvasElement
+          v-for="child in (element as GroupElement).children"
+          :key="child.id"
+          :element="child"
+          :scale="scale"
+          :is-selected="false" 
+          :is-editing="false"
+          :active-tool="activeTool"
+          @element-mouse-down="handleChildMouseDown"
+        />
+      </div>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import type { CanvasElement, ShapeElement, ImageElement, TextElement, BrushElement } from '../types/canvas'
+import type { CanvasElement, ShapeElement, ImageElement, TextElement, BrushElement, GroupElement } from '../types/canvas'
 import { getElementStyle, getImageStyle, getTextStyle, formatTextContent } from '../utils/style-calculator'
 
 interface Props {
@@ -211,6 +227,29 @@ const handleMouseDown = (e: MouseEvent) => {
   e.stopPropagation()
   emit('elementMouseDown', props.element.id, e)
 }
+
+// 处理子元素鼠标按下
+const handleChildMouseDown = (elementId: string, event: MouseEvent) => {
+  // 子元素事件冒泡到这里时，我们捕获它并发送父组合的ID（即当前element.id）
+  // 除非我们需要深入选择（Deep Select，暂不支持，所以默认选择组）
+  // 注意：如果我们想让点击子元素选中整个组，我们应该emit当前组的ID
+  
+  // 在递归结构中，点击子元素会触发子组件的 emit('elementMouseDown')
+  // 然后被这里的 handleChildMouseDown 捕获
+  // 我们不再继续 emit 子元素的 ID，而是让父级的 handleMouseDown（上面那个）处理
+  // 或者，因为我们点击的是 group div 内部，事件会冒泡到 div，
+  // 触发 @mousedown="handleMouseDown"
+  
+  // 实际上，递归的 CanvasElement 也会渲染 div 并绑定 @mousedown
+  // 如果子元素点击了，stop propagation 会被调用，所以外层 div 收不到 click
+  // 因此我们需要在这里重新 emit
+  
+  // 策略：组合行为通常是“点击任何子元素 = 选中组合”
+  // 所以我们应该拦截子元素的事件，并将其转换为选中当前组合的事件
+  
+  // 重新发出事件，但使用当前组合的ID
+  emit('elementMouseDown', props.element.id, event)
+}
 </script>
 
 <style scoped>
@@ -220,6 +259,19 @@ const handleMouseDown = (e: MouseEvent) => {
 
 .element:hover {
   opacity: 0.9;
+}
+
+/* 组合内容容器 */
+.group-content {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  pointer-events: none; /* 让事件穿透到子元素，或者由父级捕获 */
+}
+
+/* 确保子元素可以接收指针事件 */
+.group-content > .element {
+  pointer-events: auto;
 }
 
 /* 三角形轮廓渲染 */

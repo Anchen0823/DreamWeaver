@@ -130,6 +130,7 @@ import { useElementCreation } from '../composables/useElementCreation'
 import { useResize } from '../composables/useResize'
 import { useElementDrag } from '../composables/useElementDrag'
 import { useElementZoom } from '../composables/useElementZoom'
+import { useElementGrouping } from '../composables/useElementGrouping'
 import { useCanvasEvents } from '../composables/useCanvasEvents'
 import { mockElements } from '../utils/mock-data'
 import TextToolbar from './TextToolbar.vue'
@@ -195,6 +196,13 @@ const elementDrag = useElementDrag(elements, viewport, selection)
 
 // 元素缩放
 const elementZoom = useElementZoom(elements, viewport, selection)
+
+// 元素组合
+const grouping = useElementGrouping(
+  elements,
+  selection,
+  elementCreation.generateId
+)
 
 // 选中的图片元素（单选且为图片类型时）
 const selectedImageElement = computed<ImageElement | null>(() => {
@@ -589,6 +597,8 @@ defineExpose({
   addShape: elementCreation.addShape,
   addImage: elementCreation.addImage,
   addText,
+  groupElements: grouping.groupElements,
+  ungroupElements: grouping.ungroupElements,
   handleImageSelected,
   updateBrushColor,
   updateBrushStrokeWidth,

@@ -45,12 +45,24 @@
         />
       </svg>
     </template>
+
+    <!-- 组合元素 -->
+    <template v-else-if="element.type === 'group'">
+      <div class="thumbnail-group">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="4" y="4" width="7" height="7" rx="1" stroke="currentColor" />
+          <rect x="13" y="4" width="7" height="7" rx="1" stroke="currentColor" />
+          <rect x="4" y="13" width="7" height="7" rx="1" stroke="currentColor" />
+          <rect x="13" y="13" width="7" height="7" rx="1" stroke="currentColor" />
+        </svg>
+      </div>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { CanvasElement, ShapeElement, ImageElement, TextElement, BrushElement } from '../types/canvas'
+import type { CanvasElement, ShapeElement, ImageElement, TextElement, BrushElement, GroupElement } from '../types/canvas'
 
 interface Props {
   element: CanvasElement
@@ -256,6 +268,15 @@ const brushSvgStyle = computed(() => {
 
 .thumbnail-brush {
   display: block;
+}
+
+.thumbnail-group {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #999;
 }
 </style>
 

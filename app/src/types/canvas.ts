@@ -148,9 +148,19 @@ export interface BrushElement extends BaseElement {
 }
 
 /**
+ * 组合元素接口
+ */
+export interface GroupElement extends BaseElement {
+  type: 'group'
+  
+  // 子元素列表
+  children: CanvasElement[]
+}
+
+/**
  * 画布元素联合类型
  */
-export type CanvasElement = ShapeElement | ImageElement | TextElement | BrushElement
+export type CanvasElement = ShapeElement | ImageElement | TextElement | BrushElement | GroupElement
 
 /**
  * 画布配置接口
