@@ -565,6 +565,25 @@ const updateBrushStrokeWidth = (width: number) => {
   brushDrawing.setStrokeWidth(width)
 }
 
+// 重新排序元素
+const reorderElement = (fromIndex: number, toIndex: number) => {
+  if (fromIndex < 0 || fromIndex >= elements.value.length || 
+      toIndex < 0 || toIndex > elements.value.length || 
+      fromIndex === toIndex) {
+    return
+  }
+  
+  const element = elements.value[fromIndex]
+  const newElements = [...elements.value]
+  
+  // 移除元素
+  newElements.splice(fromIndex, 1)
+  // 插入元素到新位置
+  newElements.splice(toIndex, 0, element)
+  
+  elements.value = newElements
+}
+
 // 暴露方法供父组件调用
 defineExpose({
   addShape: elementCreation.addShape,
@@ -573,6 +592,7 @@ defineExpose({
   handleImageSelected,
   updateBrushColor,
   updateBrushStrokeWidth,
+  reorderElement,
   elements,
   selection
 })

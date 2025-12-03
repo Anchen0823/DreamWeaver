@@ -57,6 +57,11 @@ const handleLayerSelect = (elementId: string, ctrlKey: boolean) => {
     canvasRef.value.selection.selectedElementIds.value = [elementId]
   }
 }
+
+// 处理图层排序
+const handleReorderElement = (fromIndex: number, toIndex: number) => {
+  canvasRef.value?.reorderElement(fromIndex, toIndex)
+}
 </script>
 
 <template>
@@ -65,6 +70,7 @@ const handleLayerSelect = (elementId: string, ctrlKey: boolean) => {
       :elements="elements"
       :selected-element-ids="selectedElementIds"
       @select-element="handleLayerSelect"
+      @reorder-element="handleReorderElement"
     />
     <div class="main-content">
       <Canvas 
