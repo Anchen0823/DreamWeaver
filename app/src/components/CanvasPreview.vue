@@ -36,17 +36,30 @@
       {{ formattedSize }}
     </div>
   </template>
+  
+  <!-- 画笔预览 -->
+  <template v-if="isBrushDrawing && brushPreviewElement">
+    <CanvasElement
+      :element="brushPreviewElement"
+      :scale="viewport.scale.value"
+      :is-selected="false"
+      :is-editing="false"
+    />
+  </template>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { CanvasElement, ImageElement } from '../types/canvas'
+import type { CanvasElement as CanvasElementType, ImageElement } from '../types/canvas'
 import { getElementStyle, getImageStyle } from '../utils/style-calculator'
 import type { useDrawing } from '../composables/useDrawing'
+import type { useBrushDrawing } from '../composables/useBrushDrawing'
 import type { useViewport } from '../composables/useViewport'
+import CanvasElement from './CanvasElement.vue'
 
 interface Props {
   drawing: ReturnType<typeof useDrawing>
+  brushDrawing?: ReturnType<typeof useBrushDrawing> | null
   viewport: ReturnType<typeof useViewport>
 }
 
@@ -54,6 +67,9 @@ const props = defineProps<Props>()
 
 const isDrawing = computed(() => props.drawing.isDrawing.value)
 const previewElement = computed(() => props.drawing.previewElement.value)
+
+const isBrushDrawing = computed(() => props.brushDrawing?.isDrawing.value ?? false)
+const brushPreviewElement = computed(() => props.brushDrawing?.currentBrushElement.value ?? null)
 
 const elementStyle = computed(() => {
   if (!previewElement.value) return {}

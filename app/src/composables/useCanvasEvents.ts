@@ -5,6 +5,7 @@ import type { useCanvasInteraction } from './useCanvasInteraction'
 import type { useElementSelection } from './useElementSelection'
 import type { useClipboard } from './useClipboard'
 import type { useDrawing } from './useDrawing'
+import type { useBrushDrawing } from './useBrushDrawing'
 import type { useTextEditing } from './useTextEditing'
 import type { useResize } from './useResize'
 import type { useElementDrag } from './useElementDrag'
@@ -24,6 +25,7 @@ export function useCanvasEvents(
   selection: ReturnType<typeof useElementSelection>,
   clipboard: ReturnType<typeof useClipboard>,
   drawing: ReturnType<typeof useDrawing>,
+  brushDrawing: ReturnType<typeof useBrushDrawing> | null,
   textEditing: ReturnType<typeof useTextEditing>,
   resize: ReturnType<typeof useResize>,
   elementDrag: ReturnType<typeof useElementDrag>,
@@ -88,6 +90,30 @@ export function useCanvasEvents(
       }
     }
 
+    // 处理画笔工具
+    if (tool === 'brush' && brushDrawing) {
+      if (e.button === 0) {
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+        
+        // 转换为画布坐标
+        const canvasPos = screenToCanvas(
+          e.clientX,
+          e.clientY,
+          rect,
+          viewport.viewportOffsetX.value,
+          viewport.viewportOffsetY.value,
+          viewport.zoom.value,
+          viewport.scale.value
+        )
+        
+        // 开始画笔绘制
+        brushDrawing.startDrawing(canvasPos)
+        
+        e.preventDefault()
+        return
+      }
+    }
+
     // 先尝试处理画布拖拽
     const handled = interaction.handleMouseDown(e)
     if (handled) {
@@ -140,10 +166,21 @@ export function useCanvasEvents(
       if (drawing.isDrawing.value) {
         drawing.updateDrawing(canvasPos)
       }
+      
+      // 如果正在画笔绘制，添加点
+      if (brushDrawing && brushDrawing.isDrawing.value) {
+        brushDrawing.addPoint(canvasPos)
+      }
     }
 
     // 如果正在绘制，不处理其他交互
     if (drawing.isDrawing.value) {
+      e.preventDefault()
+      return
+    }
+    
+    // 如果正在画笔绘制，不处理其他交互
+    if (brushDrawing && brushDrawing.isDrawing.value) {
       e.preventDefault()
       return
     }
@@ -179,6 +216,24 @@ export function useCanvasEvents(
     // 如果正在拖拽元素，结束元素拖拽
     if (elementDrag.isDragging.value) {
       elementDrag.endDrag()
+      if (e) {
+        e.preventDefault()
+      }
+      return
+    }
+
+    // 如果正在画笔绘制，完成画笔绘制
+    if (brushDrawing && brushDrawing.isDrawing.value) {
+      const newElement = brushDrawing.finishDrawing()
+      
+      if (e && newElement) {
+        elements.value.push(newElement)
+        // 选中新创建的画笔元素
+        selection.selectedElementIds.value = [newElement.id]
+        // 绘制完成后，自动切换回move状态（取消工具选择）
+        onToolChange(null)
+      }
+      
       if (e) {
         e.preventDefault()
       }

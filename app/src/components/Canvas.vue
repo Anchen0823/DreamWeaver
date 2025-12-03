@@ -11,9 +11,10 @@
       'can-drag': interaction.isSpacePressed.value,
       'is-drawing': drawing.isDrawing.value,
       'is-dragging-element': elementDrag.isDragging.value,
-      'tool-active': !!props.activeTool && props.activeTool !== 'text' && props.activeTool !== 'image',
+      'tool-active': !!props.activeTool && props.activeTool !== 'text' && props.activeTool !== 'image' && props.activeTool !== 'brush',
       'tool-text': props.activeTool === 'text',
-      'tool-image': props.activeTool === 'image' && drawing.pendingImageData.value
+      'tool-image': props.activeTool === 'image' && drawing.pendingImageData.value,
+      'tool-brush': props.activeTool === 'brush'
     }"
     :style="viewport.gridBackgroundStyle.value"
     ref="containerRef"
@@ -95,6 +96,7 @@
       <!-- 绘制预览 -->
       <CanvasPreview
         :drawing="drawing"
+        :brush-drawing="brushDrawing"
         :viewport="viewport"
       />
     </div>
@@ -111,6 +113,7 @@ import { useClipboard } from '../composables/useClipboard'
 import { usePersistence } from '../composables/usePersistence'
 import { useTextEditing } from '../composables/useTextEditing'
 import { useDrawing } from '../composables/useDrawing'
+import { useBrushDrawing } from '../composables/useBrushDrawing'
 import { useElementCreation } from '../composables/useElementCreation'
 import { useResize } from '../composables/useResize'
 import { useElementDrag } from '../composables/useElementDrag'
@@ -160,6 +163,12 @@ const drawing = useDrawing(
   viewport,
   elementCreation.generateId,
   elementCreation.calculateFontSizeFromBoxSize
+)
+
+// 画笔绘制管理
+const brushDrawing = useBrushDrawing(
+  viewport,
+  elementCreation.generateId
 )
 
 // 文本编辑
@@ -375,6 +384,7 @@ const events = useCanvasEvents(
   selection,
   clipboard,
   drawing,
+  brushDrawing,
   textEditing,
   resize,
   elementDrag,
@@ -386,6 +396,10 @@ const events = useCanvasEvents(
 watch(() => props.activeTool, (newTool) => {
   if (!newTool && drawing.isDrawing.value) {
     drawing.cancelDrawing()
+  }
+  // 如果切换到非画笔工具，取消画笔绘制
+  if (newTool !== 'brush' && brushDrawing.isDrawing.value) {
+    brushDrawing.cancelDrawing()
   }
   // 如果切换到非图片工具，清除待插入的图片数据
   if (newTool !== 'image') {
@@ -538,6 +552,14 @@ onUnmounted(() => {
 }
 
 .canvas-container.tool-image.can-drag {
+  cursor: crosshair;
+}
+
+.canvas-container.tool-brush {
+  cursor: crosshair;
+}
+
+.canvas-container.tool-brush.can-drag {
   cursor: crosshair;
 }
 

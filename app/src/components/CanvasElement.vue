@@ -44,12 +44,30 @@
         class="text-edit-input"
       ></textarea>
     </template>
+    
+    <!-- 画笔元素 -->
+    <template v-else-if="element.type === 'brush'">
+      <svg
+        :style="brushSvgStyle"
+        class="brush-content"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          :d="brushPath"
+          :stroke="brushColor"
+          :stroke-width="brushStrokeWidth"
+          :stroke-linecap="brushLineCap"
+          :stroke-linejoin="brushLineJoin"
+          fill="none"
+        />
+      </svg>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import type { CanvasElement, ShapeElement, ImageElement, TextElement } from '../types/canvas'
+import type { CanvasElement, ShapeElement, ImageElement, TextElement, BrushElement } from '../types/canvas'
 import { getElementStyle, getImageStyle, getTextStyle, formatTextContent } from '../utils/style-calculator'
 
 interface Props {
@@ -123,6 +141,59 @@ const textEditStyle = computed(() => {
     borderRadius: '2px',
     background: (props.element as TextElement).backgroundColor || 'transparent',
     zIndex: 10001
+  }
+})
+
+// 画笔元素相关计算属性
+const brushElement = computed(() => {
+  if (props.element.type !== 'brush') return null
+  return props.element as BrushElement
+})
+
+const brushPath = computed(() => {
+  if (!brushElement.value || brushElement.value.points.length === 0) {
+    return ''
+  }
+  
+  const points = brushElement.value.points
+  if (points.length === 1) {
+    // 单个点，绘制一个小圆
+    return `M ${points[0].x} ${points[0].y} m -${brushElement.value.strokeWidth / 2}, 0 a ${brushElement.value.strokeWidth / 2},${brushElement.value.strokeWidth / 2} 0 1,0 ${brushElement.value.strokeWidth},0 a ${brushElement.value.strokeWidth / 2},${brushElement.value.strokeWidth / 2} 0 1,0 -${brushElement.value.strokeWidth},0`
+  }
+  
+  // 多个点，使用路径连接
+  let path = `M ${points[0].x} ${points[0].y}`
+  for (let i = 1; i < points.length; i++) {
+    path += ` L ${points[i].x} ${points[i].y}`
+  }
+  
+  return path
+})
+
+const brushColor = computed(() => {
+  return brushElement.value?.color || '#ff6b6b'
+})
+
+const brushStrokeWidth = computed(() => {
+  return brushElement.value ? (brushElement.value.strokeWidth * props.scale) : 5
+})
+
+const brushLineCap = computed(() => {
+  return brushElement.value?.lineCap || 'round'
+})
+
+const brushLineJoin = computed(() => {
+  return brushElement.value?.lineJoin || 'round'
+})
+
+const brushSvgStyle = computed(() => {
+  return {
+    width: '100%',
+    height: '100%',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    pointerEvents: 'none'
   }
 })
 </script>
@@ -200,6 +271,11 @@ const textEditStyle = computed(() => {
 .text-edit-input:focus {
   outline: none;
   box-shadow: none;
+}
+
+.brush-content {
+  user-select: none;
+  pointer-events: none;
 }
 </style>
 

@@ -91,6 +91,22 @@
           <span class="tool-name">文本</span>
         </button>
       </div>
+
+      <!-- 分隔线 -->
+      <div class="toolbar-divider"></div>
+
+      <!-- 画笔工具 -->
+      <div class="tool-group">
+        <button 
+          class="tool-button"
+          :class="{ active: activeTool === 'brush' }"
+          @click="handleSelectBrush"
+          title="画笔"
+        >
+          <BrushIcon />
+          <span class="tool-name">画笔</span>
+        </button>
+      </div>
     </div>
 
     <!-- 隐藏的文件输入 -->
@@ -114,6 +130,7 @@ import CircleIcon from './icons/CircleIcon.vue'
 import TriangleIcon from './icons/TriangleIcon.vue'
 import ImageIcon from './icons/ImageIcon.vue'
 import TextIcon from './icons/TextIcon.vue'
+import BrushIcon from './icons/BrushIcon.vue'
 
 // 定义props和事件
 const props = defineProps<{
@@ -197,6 +214,16 @@ const handleSelectText = () => {
     emit('update:activeTool', null)
   } else {
     emit('update:activeTool', 'text')
+  }
+}
+
+// 处理选择画笔工具
+const handleSelectBrush = () => {
+  // 如果点击的是已选中的工具，则取消选择
+  if (props.activeTool === 'brush') {
+    emit('update:activeTool', null)
+  } else {
+    emit('update:activeTool', 'brush')
   }
 }
 </script>
