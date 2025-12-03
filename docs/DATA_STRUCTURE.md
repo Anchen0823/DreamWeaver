@@ -2,6 +2,21 @@
 
 ## 📋 更新记录
 
+- **v1.3.1** (2025-12-XX): 修复三角形轮廓渲染问题
+  - 修复三角形图形元素的轮廓渲染不正确的问题
+  - 使用 clip-path 和伪元素实现三角形轮廓
+  - 从三角形重心点统一缩放，保持内外三角形相似性
+  - 优化预览组件中的三角形轮廓渲染
+
+- **v1.3.0** (2025-12-XX): 添加图层面板和元素调整大小功能
+  - 实现左侧图层面板组件（LayersPanel）
+  - 实现图层缩略图组件（LayerThumbnail）
+  - 支持点击图层选择元素，Ctrl/Cmd 多选
+  - 优化元素调整大小交互（角点和边缘拖动）
+  - 尺寸标签移至元素下方中心
+  - 优化滚动条显示（悬停时显示）
+  - 修复三角形缩略图显示问题
+
 - **v1.2.0** (2025-12-XX): 添加工具栏和拖拽绘制功能
   - 实现底部工具栏组件（漂浮卡片样式）
   - 添加Move工具作为默认选择工具
@@ -224,6 +239,7 @@ actualFontSize = element.fontSize * scale
 - **工具栏系统**（Move工具、图形工具、图片工具、文本工具）
 - **拖拽绘制功能**（实时预览、选中框轮廓、尺寸标签）
 - **复制粘贴功能**（支持多选元素）
+- **三角形轮廓渲染**（使用 clip-path 和伪元素，从重心点缩放保持相似性）
 
 ### ⏳ 待实现
 - ViewportState 视口状态管理（目前使用简化实现）
@@ -302,16 +318,50 @@ actualFontSize = element.fontSize * scale
 
 ### 样式计算示例
 
+#### 三角形元素渲染（v1.3.1+）
+
+三角形使用 `clip-path` 和伪元素实现轮廓渲染：
+
 ```typescript
 // 三角形元素渲染计算
+const clipPath = 'polygon(50% 0%, 0% 100%, 100% 100%)' // 向下指向的三角形
+const borderWidth = element.borderWidth * scale
 const scaledWidth = element.width * scale
 const scaledHeight = element.height * scale
 
-// CSS样式
+// 计算统一的缩放比例（从重心点缩放，保持相似性）
+const minDimension = Math.min(scaledWidth, scaledHeight)
+const scaleRatio = borderWidth > 0 && minDimension > 0 
+  ? Math.max(0, (minDimension - borderWidth * 2) / minDimension) 
+  : 1
+
+// CSS样式（通过CSS变量传递）
 {
-  borderLeft: `${scaledWidth / 2}px solid transparent`,
-  borderRight: `${scaledWidth / 2}px solid transparent`,
-  borderBottom: `${scaledHeight}px solid ${element.backgroundColor}`
+  clipPath: clipPath,
+  WebkitClipPath: clipPath, // Safari 兼容
+  backgroundColor: 'transparent', // 背景通过伪元素实现
+  '--border-width': borderWidth + 'px',
+  '--border-color': element.borderColor,
+  '--background-color': element.backgroundColor,
+  '--scale-ratio': scaleRatio
+}
+```
+
+**渲染机制**：
+- `::before` 伪元素：外层三角形，使用 `borderColor` 作为轮廓
+- `::after` 伪元素：内层三角形，使用 `backgroundColor` 作为填充
+- 内层三角形从重心点（50%, 66.67%）统一缩放，保持内外三角形相似性
+- 缩放比例基于最小尺寸计算，确保边框均匀
+
+#### 其他图形元素渲染
+
+```typescript
+// 矩形、圆角矩形、圆形使用标准 CSS 边框
+{
+  backgroundColor: element.backgroundColor,
+  borderWidth: element.borderWidth + 'px',
+  borderStyle: 'solid',
+  borderColor: element.borderColor
 }
 ```
 
