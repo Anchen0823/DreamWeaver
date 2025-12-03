@@ -176,13 +176,15 @@ const elementCreation = useElementCreation(elements, selection)
 const drawing = useDrawing(
   viewport,
   elementCreation.generateId,
-  elementCreation.calculateFontSizeFromBoxSize
+  elementCreation.calculateFontSizeFromBoxSize,
+  elementCreation.generateDefaultName
 )
 
 // 画笔绘制管理
 const brushDrawing = useBrushDrawing(
   viewport,
-  elementCreation.generateId
+  elementCreation.generateId,
+  elementCreation.generateDefaultName
 )
 
 // 文本编辑
@@ -201,7 +203,8 @@ const elementZoom = useElementZoom(elements, viewport, selection)
 const grouping = useElementGrouping(
   elements,
   selection,
-  elementCreation.generateId
+  elementCreation.generateId,
+  elementCreation.generateDefaultName
 )
 
 // 选中的图片元素（单选且为图片类型时）

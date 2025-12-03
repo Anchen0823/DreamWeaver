@@ -8,7 +8,8 @@ import type { useElementSelection } from './useElementSelection'
 export function useElementGrouping(
   elements: Ref<CanvasElement[]>,
   selection: ReturnType<typeof useElementSelection>,
-  generateId: () => string
+  generateId: () => string,
+  generateDefaultName: (type: string) => string
 ) {
   
   /**
@@ -65,6 +66,7 @@ export function useElementGrouping(
     const groupElement: GroupElement = {
       id: generateId(),
       type: 'group',
+      name: generateDefaultName('group'),
       x: groupX,
       y: groupY,
       width: groupWidth,

@@ -10,7 +10,8 @@ import { screenToCanvas } from '../utils/coordinate-utils'
 export function useDrawing(
   viewport: ReturnType<typeof useViewport>,
   generateId: () => string,
-  calculateFontSizeFromBoxSize: (width: number, height: number) => number
+  calculateFontSizeFromBoxSize: (width: number, height: number) => number,
+  generateDefaultName: (type: string) => string
 ) {
   // 绘制状态
   const isDrawing = ref(false)
@@ -198,7 +199,8 @@ export function useDrawing(
       // 创建新元素
       const newElement: CanvasElement = {
         ...element,
-        id: generateId()
+        id: generateId(),
+        name: generateDefaultName(element.type)
       } as CanvasElement
       
       // 如果是图片，清除待插入的图片数据

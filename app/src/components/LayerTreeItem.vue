@@ -211,6 +211,12 @@ const getReversedChildren = (group: CanvasElement) => {
 
 // 获取元素名称
 const getElementName = (element: CanvasElement): string => {
+  // 优先使用自定义名称
+  if (element.name) {
+    return element.name
+  }
+  
+  // 回退到默认名称（类型名）
   const typeNames: Record<string, string> = {
     'rectangle': '矩形',
     'rounded-rectangle': '圆角矩形',

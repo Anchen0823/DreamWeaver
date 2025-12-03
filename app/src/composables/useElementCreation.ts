@@ -15,6 +15,40 @@ export function useElementCreation(
     return `element-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
   }
 
+  // 生成默认元素名称
+  const generateDefaultName = (type: string): string => {
+    const typeNames: Record<string, string> = {
+      'rectangle': '矩形',
+      'rounded-rectangle': '圆角矩形',
+      'circle': '圆形',
+      'triangle': '三角形',
+      'image': '图片',
+      'text': '文本',
+      'brush': '画笔',
+      'group': '组合'
+    }
+    
+    const baseName = typeNames[type] || '元素'
+    
+    // 计算同类型元素的数量
+    const countSameType = (list: CanvasElement[], targetType: string): number => {
+      let count = 0
+      for (const el of list) {
+        if (el.type === targetType) {
+          count++
+        }
+        // 递归计算组合内的元素
+        if (el.type === 'group') {
+          count += countSameType((el as any).children || [], targetType)
+        }
+      }
+      return count
+    }
+    
+    const count = countSameType(elements.value, type)
+    return `${baseName} ${count + 1}`
+  }
+
   // 根据文本框大小计算合适的字体大小
   const calculateFontSizeFromBoxSize = (width: number, height: number): number => {
     if (width <= 0 || height <= 0) {
@@ -41,6 +75,7 @@ export function useElementCreation(
     const newElement: ShapeElement = {
       id: generateId(),
       type,
+      name: generateDefaultName(type),
       x: defaultX,
       y: defaultY,
       width: type === 'circle' ? 80 : defaultWidth,
@@ -78,6 +113,7 @@ export function useElementCreation(
     const newElement: ImageElement = {
       id: generateId(),
       type: 'image',
+      name: generateDefaultName('image'),
       x: defaultX,
       y: defaultY,
       width,
@@ -105,6 +141,7 @@ export function useElementCreation(
     const newElement: TextElement = {
       id: generateId(),
       type: 'text',
+      name: generateDefaultName('text'),
       x: defaultX,
       y: defaultY,
       width: defaultWidth,
@@ -129,6 +166,7 @@ export function useElementCreation(
 
   return {
     generateId,
+    generateDefaultName,
     calculateFontSizeFromBoxSize,
     addShape,
     addImage,

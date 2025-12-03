@@ -9,6 +9,9 @@ export interface BaseElement {
   // 元素类型
   type: ElementType
   
+  // 元素名称（用户可编辑）
+  name?: string
+  
   // 位置坐标（相对于画布左上角）
   x: number
   y: number

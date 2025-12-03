@@ -8,7 +8,8 @@ import type { useViewport } from './useViewport'
  */
 export function useBrushDrawing(
   viewport: ReturnType<typeof useViewport>,
-  generateId: () => string
+  generateId: () => string,
+  generateDefaultName: (type: string) => string
 ) {
   // 绘制状态
   const isDrawing = ref(false)
@@ -111,7 +112,8 @@ export function useBrushDrawing(
 
     const element: BrushElement = {
       ...currentBrushElement.value,
-      id: generateId()
+      id: generateId(),
+      name: generateDefaultName('brush')
     }
 
     // 重置状态
