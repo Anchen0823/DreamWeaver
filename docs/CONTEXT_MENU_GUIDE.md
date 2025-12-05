@@ -135,8 +135,8 @@
 | 复制 | `Ctrl+C` | `Cmd+C` |
 | 粘贴 | `Ctrl+V` | `Cmd+V` |
 | 删除 | `Delete` | `Delete` |
-| 编组 | 右键菜单 | 右键菜单 |
-| 解组 | 右键菜单 | 右键菜单 |
+| 编组 | `Ctrl+G` | `Cmd+G` |
+| 解组 | `Ctrl+Shift+G` | `Cmd+Shift+G` |
 
 ## 注意事项
 

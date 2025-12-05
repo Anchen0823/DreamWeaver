@@ -533,7 +533,9 @@ const events = useCanvasEvents(
   resize,
   elementDrag,
   elementZoom,
-  (tool) => emit('update:activeTool', tool)
+  grouping,
+  (tool) => emit('update:activeTool', tool),
+  elementCreation.generateDefaultName
 )
 
 // 监听activeTool变化，取消绘制状态
@@ -679,7 +681,11 @@ const handleContextMenuCopy = () => {
 // 处理上下文菜单：粘贴
 const handleContextMenuPaste = () => {
   if (clipboard.clipboard.value.length > 0) {
-    const newElements = clipboard.pasteElements(elements.value, selection.selectedElementIds)
+    const newElements = clipboard.pasteElements(
+      elements.value, 
+      selection.selectedElementIds,
+      elementCreation.generateDefaultName
+    )
     elements.value.push(...newElements)
   }
 }

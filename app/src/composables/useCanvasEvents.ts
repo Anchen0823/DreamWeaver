@@ -10,6 +10,7 @@ import type { useTextEditing } from './useTextEditing'
 import type { useResize } from './useResize'
 import type { useElementDrag } from './useElementDrag'
 import type { useElementZoom } from './useElementZoom'
+import type { useElementGrouping } from './useElementGrouping'
 import { screenToCanvas } from '../utils/coordinate-utils'
 
 /**
@@ -30,7 +31,9 @@ export function useCanvasEvents(
   resize: ReturnType<typeof useResize>,
   elementDrag: ReturnType<typeof useElementDrag>,
   elementZoom: ReturnType<typeof useElementZoom>,
-  onToolChange: (tool: string | null) => void
+  grouping: ReturnType<typeof useElementGrouping>,
+  onToolChange: (tool: string | null) => void,
+  generateDefaultName: (type: string) => string
 ) {
   // 处理容器鼠标按下事件
   const handleContainerMouseDown = (e: MouseEvent) => {
@@ -332,8 +335,36 @@ export function useCanvasEvents(
     // Ctrl/Cmd + V: 粘贴
     if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) {
       if (clipboard.clipboard.value.length > 0) {
-        const newElements = clipboard.pasteElements(elements.value, selection.selectedElementIds)
+        const newElements = clipboard.pasteElements(
+          elements.value, 
+          selection.selectedElementIds,
+          generateDefaultName
+        )
         elements.value.push(...newElements)
+        e.preventDefault()
+      }
+      return
+    }
+
+    // Ctrl/Cmd + G: 编组
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'g' || e.key === 'G')) {
+      if (selection.selectedElementIds.value.length >= 2) {
+        grouping.groupElements()
+        e.preventDefault()
+      }
+      return
+    }
+
+    // Ctrl/Cmd + Shift + G: 解组
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'g' || e.key === 'G')) {
+      // 检查是否有选中组合元素
+      const hasGroup = selection.selectedElementIds.value.some(id => {
+        const element = elements.value.find(el => el.id === id)
+        return element && element.type === 'group'
+      })
+      
+      if (hasGroup) {
+        grouping.ungroupElements()
         e.preventDefault()
       }
       return

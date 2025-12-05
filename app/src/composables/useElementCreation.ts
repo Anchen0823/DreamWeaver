@@ -30,23 +30,33 @@ export function useElementCreation(
     
     const baseName = typeNames[type] || '元素'
     
-    // 计算同类型元素的数量
-    const countSameType = (list: CanvasElement[], targetType: string): number => {
-      let count = 0
+    // 查找同类型元素名称中的最大编号
+    const findMaxNumber = (list: CanvasElement[], targetType: string): number => {
+      let maxNum = 0
       for (const el of list) {
-        if (el.type === targetType) {
-          count++
+        if (el.type === targetType && el.name) {
+          // 尝试从名称中提取数字（例如："矩形 10" -> 10）
+          const match = el.name.match(/\d+$/)
+          if (match) {
+            const num = parseInt(match[0], 10)
+            if (num > maxNum) {
+              maxNum = num
+            }
+          }
         }
-        // 递归计算组合内的元素
+        // 递归处理组合内的元素
         if (el.type === 'group') {
-          count += countSameType((el as any).children || [], targetType)
+          const childMaxNum = findMaxNumber((el as any).children || [], targetType)
+          if (childMaxNum > maxNum) {
+            maxNum = childMaxNum
+          }
         }
       }
-      return count
+      return maxNum
     }
     
-    const count = countSameType(elements.value, type)
-    return `${baseName} ${count + 1}`
+    const maxNum = findMaxNumber(elements.value, type)
+    return `${baseName} ${maxNum + 1}`
   }
 
   // 根据文本框大小计算合适的字体大小

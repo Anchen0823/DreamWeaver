@@ -38,7 +38,8 @@
       >
         <span class="menu-icon">📦</span>
         <span class="menu-label">编组</span>
-        <span class="menu-hint" v-if="!canGroup">(需选中多个元素)</span>
+        <span class="menu-shortcut" v-if="canGroup">Ctrl+G</span>
+        <span class="menu-hint" v-else>(需选中多个元素)</span>
       </div>
       <div 
         class="context-menu-item" 
@@ -47,7 +48,8 @@
       >
         <span class="menu-icon">📂</span>
         <span class="menu-label">解组</span>
-        <span class="menu-hint" v-if="!canUngroup">(需选中组合元素)</span>
+        <span class="menu-shortcut" v-if="canUngroup">Ctrl+Shift+G</span>
+        <span class="menu-hint" v-else>(需选中组合元素)</span>
       </div>
     </div>
   </Teleport>
