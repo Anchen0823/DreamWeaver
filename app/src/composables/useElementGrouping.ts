@@ -78,33 +78,17 @@ export function useElementGrouping(
     // 从后往前删除，以免索引错乱
     const newElements = [...elements.value]
     for (let i = indicesToRemove.length - 1; i >= 0; i--) {
-      newElements.splice(indicesToRemove[i], 1)
+      newElements.splice(indicesToRemove[i]!, 1)
     }
     
     // 将组合元素插入到原来最上层元素的位置（或者最顶层）
     // 为了符合直觉，通常插入到被组合元素中 z-index 最高的那个位置
-    const insertIndex = indicesToRemove[indicesToRemove.length - 1] - (indicesToRemove.length - 1)
-    // 修正插入位置逻辑：简单起见，我们把它放到被移除的最后一个元素的位置
-    // 但因为我们已经移除了多个，索引需要调整
     // indicesToRemove 是升序排列的
     // 比如 [1, 3, 5]，移除后，原位置 5 变成了 5-2=3
     
-    // 简单策略：添加到原来最高层级的位置
-    // 或者直接 push 到末尾？不，这会改变层级
-    // 我们尝试保持在原处的相对位置
-    
-    // 修正策略：既然我们是一次性构建 newElements，我们可以 filter 掉旧的，然后 splice 插入
-    // const newElements = elements.value.filter(el => !selectedIds.includes(el.id))
-    // 插入位置？使用最顶层选中元素的索引
-    // let maxIndex = -1
-    // elements.value.forEach((el, idx) => { if(selectedIds.includes(el.id)) maxIndex = idx })
-    // newElements.splice(maxIndex - (selectedIds.length - 1), 0, groupElement)
-    
-    // 实际上，上面的 indicesToRemove 处理逻辑有点复杂，用 filter 更简单
-    // 但为了确定插入位置：
-    const lastSelectedIndex = indicesToRemove[indicesToRemove.length - 1]
-    // 计算移除后的插入位置
+    // 计算插入位置：使用最顶层选中元素的索引
     // 在原数组中，lastSelectedIndex 之前有 indicesToRemove.length - 1 个选中元素被移除
+    const lastSelectedIndex = indicesToRemove[indicesToRemove.length - 1]!
     const targetIndex = lastSelectedIndex - (indicesToRemove.length - 1)
     
     newElements.splice(targetIndex, 0, groupElement)

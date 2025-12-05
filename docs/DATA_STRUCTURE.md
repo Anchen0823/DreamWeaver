@@ -2,6 +2,17 @@
 
 ## 📋 更新记录
 
+- **v1.5.0** (2025-12-XX): 实现组合元素功能
+  - 新增 GroupElement 接口定义
+  - 支持递归树形结构，无限层级嵌套
+  - 实现相对坐标系统（子元素相对父组合定位）
+  - 实现组合创建功能（useElementGrouping composable）
+  - 实现组合解散功能（支持递归解散嵌套组合）
+  - 自动计算组合边界框
+  - 坐标自动转换（全局坐标 ↔ 相对坐标）
+  - 保持元素层级关系
+  - 详细的数据结构设计文档
+
 - **v1.4.0** (2025-12-XX): 实现画笔工具功能
   - 新增 BrushElement 接口定义
   - 支持路径点数组存储画笔轨迹
@@ -156,13 +167,73 @@ interface BrushElement extends BaseElement {
 - `lineCap` 和 `lineJoin` 用于控制画笔线条的样式，默认为 `'round'`
 - `pressure` 字段预留用于未来支持压感笔设备
 
-### 7. 画布元素联合类型
+### 7. 组合元素接口 (GroupElement)
 
 ```typescript
-type CanvasElement = ShapeElement | ImageElement | TextElement | BrushElement
+interface GroupElement extends BaseElement {
+  type: 'group'
+  children: CanvasElement[]       // 子元素列表（支持任意嵌套）
+}
 ```
 
-### 8. 画布配置接口
+**设计原则**：
+
+#### 7.1 递归树形结构
+- 组合元素可以包含任意类型的子元素，包括其他组合元素
+- 支持无限层级嵌套，形成树形结构
+- `CanvasElement` 联合类型包含 `GroupElement`，实现递归定义
+
+#### 7.2 相对坐标系统
+- **组合元素坐标**：`x`, `y` 是组合左上角相对于父容器（画布或父组合）的坐标
+- **子元素坐标**：`children` 中每个子元素的 `x`, `y` 是相对于组合左上角的坐标
+- **边界框计算**：组合的 `width` 和 `height` 由所有子元素的边界框自动计算
+
+#### 7.3 坐标转换规则
+
+**组合创建时**（全局坐标 → 相对坐标）：
+```typescript
+// 1. 计算组合的边界框
+const minX = Math.min(...selectedElements.map(el => el.x))
+const minY = Math.min(...selectedElements.map(el => el.y))
+const maxX = Math.max(...selectedElements.map(el => el.x + el.width))
+const maxY = Math.max(...selectedElements.map(el => el.y + el.height))
+
+// 2. 组合元素的位置和尺寸
+groupElement.x = minX
+groupElement.y = minY
+groupElement.width = maxX - minX
+groupElement.height = maxY - minY
+
+// 3. 子元素坐标转换为相对坐标
+child.x = child.x - groupElement.x
+child.y = child.y - groupElement.y
+```
+
+**组合解散时**（相对坐标 → 全局坐标）：
+```typescript
+// 子元素坐标转换回全局坐标
+child.x = child.x + groupElement.x
+child.y = child.y + groupElement.y
+```
+
+#### 7.4 层级管理
+- 组合元素在元素列表中占据一个位置，保持原有元素的层级关系
+- 组合内部的子元素层级由 `children` 数组的顺序决定（数组靠后的元素在上层）
+- 移动组合时，所有子元素随之移动（保持相对位置）
+- 组合的变换（移动、缩放、旋转）会影响所有子元素
+
+#### 7.5 递归渲染
+- 渲染组合时递归渲染所有子元素
+- 子元素继承父组合的变换矩阵（坐标偏移、缩放、旋转等）
+- 支持嵌套组合的多层变换叠加
+
+### 8. 画布元素联合类型
+
+```typescript
+type CanvasElement = ShapeElement | ImageElement | TextElement | BrushElement | GroupElement
+```
+
+### 9. 画布配置接口
 
 ```typescript
 interface CanvasConfig {
@@ -173,7 +244,7 @@ interface CanvasConfig {
 }
 ```
 
-### 9. 视口状态接口（未来扩展）
+### 10. 视口状态接口（未来扩展）
 
 ```typescript
 interface ViewportState {
@@ -185,7 +256,7 @@ interface ViewportState {
 }
 ```
 
-### 10. 画布状态接口（未来扩展）
+### 11. 画布状态接口（未来扩展）
 
 ```typescript
 interface CanvasState {
@@ -266,6 +337,16 @@ actualFontSize = element.fontSize * scale
 - 响应式计算优化，避免频繁重绘
 - 支持按需加载（未来扩展）
 
+### 5. 组合元素设计考虑
+- **递归结构**：支持无限层级嵌套，适用于复杂的设计场景
+- **相对坐标系**：简化子元素的定位计算，组合移动时子元素自动跟随
+- **边界框自动计算**：组合尺寸由子元素决定，保证视觉一致性
+- **坐标转换**：组合/解散时自动处理坐标转换，对用户透明
+- **层级保持**：创建组合时保持原有元素的层级关系
+- **深拷贝处理**：避免引用问题，确保数据独立性
+- **递归渲染**：支持嵌套组合的多层变换叠加
+- **未来扩展**：预留空间支持组合整体变换（缩放、旋转）和深层选择
+
 ## 五、当前实现状态
 
 ### ✅ 已实现
@@ -274,6 +355,7 @@ actualFontSize = element.fontSize * scale
 - ImageElement 图片元素接口（支持PNG、JPEG，3种滤镜）
 - TextElement 文本元素接口（支持BIUS样式，字体大小自适应）
 - BrushElement 画笔痕迹元素接口（支持路径点数组、画笔颜色和宽度）
+- **GroupElement 组合元素接口**（支持递归嵌套、相对坐标系统、层级管理）
 - CanvasElement 联合类型
 - CanvasConfig 画布配置接口
 - **响应式布局系统**（动态缩放、媒体查询、多设备适配）
@@ -281,17 +363,19 @@ actualFontSize = element.fontSize * scale
 - **拖拽绘制功能**（实时预览、选中框轮廓、尺寸标签）
 - **画笔绘制功能**（路径点记录、SVG渲染、连续绘制）
 - **复制粘贴功能**（支持多选元素）
+- **组合/解散功能**（支持多选元素组合、递归解散、坐标转换）
 - **三角形轮廓渲染**（使用 clip-path 和伪元素，从重心点缩放保持相似性）
 
 ### ⏳ 待实现
 - ViewportState 视口状态管理（目前使用简化实现）
 - CanvasState 完整画布状态管理
-- GroupElement 组合元素接口
 - 数据持久化结构
 - 高级响应式特性（自定义断点、设备特定样式）
 - **画笔工具栏**（用于设置画笔颜色、宽度等属性）
 - **橡皮工具实现**（擦除画笔痕迹的功能）
 - **压感支持**（利用 pressure 字段实现压感笔设备支持）
+- **组合元素变换**（组合整体缩放、旋转等操作）
+- **深层选择支持**（在组合内部直接选择子元素）
 
 ## 六、数据示例
 
@@ -382,6 +466,116 @@ actualFontSize = element.fontSize * scale
 - `width` 和 `height` 应该根据 `points` 的边界框自动计算（包含画笔宽度的一半作为边距）
 - `lineCap` 和 `lineJoin` 默认为 `'round'`，提供平滑的画笔效果
 
+### 组合元素示例
+```json
+{
+  "id": "group1",
+  "type": "group",
+  "name": "Group 1",
+  "x": 50,
+  "y": 50,
+  "width": 250,
+  "height": 200,
+  "children": [
+    {
+      "id": "rect1",
+      "type": "rectangle",
+      "x": 0,
+      "y": 0,
+      "width": 100,
+      "height": 80,
+      "backgroundColor": "#ff6b6b",
+      "borderWidth": 2,
+      "borderColor": "#ff4757"
+    },
+    {
+      "id": "circle1",
+      "type": "circle",
+      "x": 150,
+      "y": 100,
+      "width": 100,
+      "height": 100,
+      "backgroundColor": "#4ecdc4",
+      "borderWidth": 2,
+      "borderColor": "#45b7aa"
+    }
+  ]
+}
+```
+
+**说明**：
+- 组合元素的 `x`, `y` 是相对于画布（或父组合）的坐标
+- 子元素的 `x`, `y` 是相对于组合左上角的坐标
+- `width` 和 `height` 是组合的边界框尺寸（由子元素自动计算）
+- 子元素可以是任意类型，包括其他组合元素
+
+### 嵌套组合元素示例
+```json
+{
+  "id": "group2",
+  "type": "group",
+  "name": "Nested Group",
+  "x": 100,
+  "y": 100,
+  "width": 300,
+  "height": 250,
+  "children": [
+    {
+      "id": "text1",
+      "type": "text",
+      "x": 0,
+      "y": 0,
+      "width": 200,
+      "height": 50,
+      "content": "Nested Structure",
+      "fontFamily": "Arial, sans-serif",
+      "fontSize": 18,
+      "color": "#333333"
+    },
+    {
+      "id": "group1",
+      "type": "group",
+      "name": "Sub Group",
+      "x": 0,
+      "y": 70,
+      "width": 250,
+      "height": 180,
+      "children": [
+        {
+          "id": "rect2",
+          "type": "rectangle",
+          "x": 0,
+          "y": 0,
+          "width": 120,
+          "height": 80,
+          "backgroundColor": "#a29bfe",
+          "borderWidth": 2,
+          "borderColor": "#6c5ce7"
+        },
+        {
+          "id": "image1",
+          "type": "image",
+          "x": 130,
+          "y": 40,
+          "width": 120,
+          "height": 90,
+          "src": "/test1.jpg",
+          "originalWidth": 120,
+          "originalHeight": 90
+        }
+      ]
+    }
+  ]
+}
+```
+
+**说明**：
+- 支持多层嵌套组合，理论上无限制
+- 每一层的坐标都是相对于其直接父容器
+- 绝对坐标计算：递归累加所有父级的偏移量
+  - `rect2` 的绝对坐标 = `100 + 0 + 0, 100 + 70 + 0` = `(100, 170)`
+  - `image1` 的绝对坐标 = `100 + 0 + 130, 100 + 70 + 40` = `(230, 210)`
+
 ## 七、技术实现细节
 
 ### 响应式渲染流程
@@ -439,6 +633,102 @@ const scaleRatio = borderWidth > 0 && minDimension > 0
   borderColor: element.borderColor
 }
 ```
+
+### 组合元素实现细节
+
+#### 创建组合 (groupElements)
+
+```typescript
+// 1. 计算边界框
+const bounds = calculateBounds(selectedElements)
+
+// 2. 创建组合元素
+const group: GroupElement = {
+  id: generateId(),
+  type: 'group',
+  name: generateDefaultName('group'),
+  x: bounds.minX,
+  y: bounds.minY,
+  width: bounds.maxX - bounds.minX,
+  height: bounds.maxY - bounds.minY,
+  children: selectedElements.map(el => ({
+    ...deepClone(el),
+    x: el.x - bounds.minX,
+    y: el.y - bounds.minY
+  }))
+}
+
+// 3. 替换元素列表
+// - 移除被组合的元素
+// - 在原位置插入组合元素
+// - 保持层级顺序
+```
+
+#### 解散组合 (ungroupElements)
+
+```typescript
+// 1. 递归处理函数
+const processList = (list: CanvasElement[]): CanvasElement[] => {
+  const result: CanvasElement[] = []
+  
+  for (const el of list) {
+    if (shouldUngroup(el)) {
+      // 解散此组合
+      const group = el as GroupElement
+      const children = group.children.map(child => ({
+        ...deepClone(child),
+        x: child.x + group.x,  // 转换回全局坐标
+        y: child.y + group.y
+      }))
+      // 递归处理子元素
+      result.push(...processList(children))
+    } else if (el.type === 'group') {
+      // 保留组合，但递归处理其子元素
+      result.push({
+        ...el,
+        children: processList(el.children)
+      })
+    } else {
+      result.push(el)
+    }
+  }
+  
+  return result
+}
+
+// 2. 应用递归处理
+const newElements = processList(elements)
+```
+
+#### 组合渲染逻辑
+
+组合元素通过递归渲染实现：
+
+```typescript
+// 伪代码示例
+function renderElement(element: CanvasElement, parentOffset = {x: 0, y: 0}) {
+  const absoluteX = parentOffset.x + element.x
+  const absoluteY = parentOffset.y + element.y
+  
+  if (element.type === 'group') {
+    // 渲染组合容器
+    const groupOffset = { x: absoluteX, y: absoluteY }
+    
+    // 递归渲染所有子元素
+    element.children.forEach(child => {
+      renderElement(child, groupOffset)
+    })
+  } else {
+    // 渲染普通元素
+    renderPrimitiveElement(element, absoluteX, absoluteY)
+  }
+}
+```
+
+**关键点**：
+- 每层递归累加父级偏移量，计算绝对坐标
+- 支持无限层级嵌套
+- 变换矩阵逐层叠加（未来支持缩放、旋转时）
 
 ### 浏览器兼容性
 

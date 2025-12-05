@@ -6,6 +6,7 @@
     @mouseup="events.handleContainerMouseUp"
     @mouseleave="events.handleContainerMouseUp"
     @wheel="events.handleContainerWheel"
+    @contextmenu="handleContextMenu"
     :class="{ 
       'is-dragging': interaction.isDragging.value, 
       'can-drag': interaction.isSpacePressed.value,
@@ -112,6 +113,20 @@
         :viewport="viewport"
       />
     </div>
+    
+    <!-- 右键菜单 -->
+    <ContextMenu
+      :visible="contextMenu.visible"
+      :position="contextMenu.position"
+      :selected-elements="contextMenu.selectedElements"
+      :has-clipboard="clipboard.clipboard.value.length > 0"
+      @copy="handleContextMenuCopy"
+      @paste="handleContextMenuPaste"
+      @delete="handleContextMenuDelete"
+      @group="handleContextMenuGroup"
+      @ungroup="handleContextMenuUngroup"
+      @close="closeContextMenu"
+    />
   </div>
 </template>
 
@@ -140,6 +155,7 @@ import BrushElementToolbar from './BrushElementToolbar.vue'
 import CanvasElement from './CanvasElement.vue'
 import CanvasSelection from './CanvasSelection.vue'
 import CanvasPreview from './CanvasPreview.vue'
+import ContextMenu from './ContextMenu.vue'
 
 // Props
 const props = defineProps<{
@@ -206,6 +222,13 @@ const grouping = useElementGrouping(
   elementCreation.generateId,
   elementCreation.generateDefaultName
 )
+
+// 上下文菜单状态
+const contextMenu = ref({
+  visible: false,
+  position: { x: 0, y: 0 },
+  selectedElements: [] as CanvasElementType[]
+})
 
 // 选中的图片元素（单选且为图片类型时）
 const selectedImageElement = computed<ImageElement | null>(() => {
@@ -549,6 +572,23 @@ watch(() => selection.selectedElementIds.value, (newIds, oldIds) => {
   })
 })
 
+// 全局点击事件，关闭上下文菜单
+const handleGlobalClick = () => {
+  if (contextMenu.value.visible) {
+    closeContextMenu()
+  }
+}
+
+// 组件挂载时添加全局点击事件监听
+onMounted(() => {
+  document.addEventListener('click', handleGlobalClick)
+})
+
+// 组件卸载时移除全局点击事件监听
+onUnmounted(() => {
+  document.removeEventListener('click', handleGlobalClick)
+})
+
 // 处理图片选择
 const handleImageSelected = (src: string, width: number, height: number) => {
   drawing.pendingImageData.value = { src, originalWidth: width, originalHeight: height }
@@ -593,6 +633,84 @@ const reorderElement = (fromIndex: number, toIndex: number) => {
   newElements.splice(toIndex, 0, element)
   
   elements.value = newElements
+}
+
+// 处理右键菜单
+const handleContextMenu = (e: MouseEvent) => {
+  e.preventDefault()
+  
+  // 如果没有选中元素，不显示菜单
+  if (selection.selectedElementIds.value.length === 0) {
+    closeContextMenu()
+    return
+  }
+  
+  // 获取选中的元素
+  const selectedElements = selection.selectedElementIds.value
+    .map(id => elements.value.find(el => el.id === id))
+    .filter((el): el is CanvasElementType => el !== undefined)
+  
+  // 显示上下文菜单
+  contextMenu.value = {
+    visible: true,
+    position: { x: e.clientX, y: e.clientY },
+    selectedElements
+  }
+  
+  // 更新鼠标位置（用于粘贴）
+  if (containerRef.value) {
+    const rect = containerRef.value.getBoundingClientRect()
+    const canvasX = (e.clientX - rect.left - viewport.viewportOffsetX.value) / viewport.zoom.value / viewport.scale.value
+    const canvasY = (e.clientY - rect.top - viewport.viewportOffsetY.value) / viewport.zoom.value / viewport.scale.value
+    clipboard.updateMousePosition(canvasX, canvasY)
+  }
+}
+
+// 关闭上下文菜单
+const closeContextMenu = () => {
+  contextMenu.value.visible = false
+}
+
+// 处理上下文菜单：复制
+const handleContextMenuCopy = () => {
+  clipboard.copySelectedElements(selection.selectedElementIds.value, elements.value)
+}
+
+// 处理上下文菜单：粘贴
+const handleContextMenuPaste = () => {
+  if (clipboard.clipboard.value.length > 0) {
+    const newElements = clipboard.pasteElements(elements.value, selection.selectedElementIds)
+    elements.value.push(...newElements)
+  }
+}
+
+// 处理上下文菜单：删除
+const handleContextMenuDelete = () => {
+  if (selection.selectedElementIds.value.length > 0) {
+    const selectedIds = selection.selectedElementIds.value
+    elements.value = elements.value.filter(element => !selectedIds.includes(element.id))
+    selection.selectedElementIds.value = []
+  }
+}
+
+// 处理上下文菜单：编组
+const handleContextMenuGroup = () => {
+  if (selection.selectedElementIds.value.length >= 2) {
+    grouping.groupElements()
+  }
+}
+
+// 处理上下文菜单：解组
+const handleContextMenuUngroup = () => {
+  // 检查是否有选中组合元素
+  const hasGroup = selection.selectedElementIds.value.some(id => {
+    const element = elements.value.find(el => el.id === id)
+    return element && element.type === 'group'
+  })
+  
+  if (hasGroup) {
+    grouping.ungroupElements()
+  }
 }
 
 // 重新排序组合内的元素

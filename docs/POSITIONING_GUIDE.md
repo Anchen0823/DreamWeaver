@@ -138,3 +138,4 @@ const canvasY = (e.clientY - viewportOffsetY) / zoom / scale;
 3.  **视觉恒定用除法**：任何放在 `.canvas` 里的元素，如果你希望它的大小或边距在视觉上保持不变（不随画布缩放而变大变小），你需要除以 `zoom`。
     *   例如：调整手柄的大小、边框的粗细、工具栏的垂直间距。
 
+
