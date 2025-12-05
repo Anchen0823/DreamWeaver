@@ -4,25 +4,26 @@
       <h3 class="layers-title">图层</h3>
     </div>
     <div class="layers-list">
-      <div
+      <LayerTreeItem
         v-for="(element, index) in reversedElements"
         :key="element.id"
-        class="layer-item"
-        :class="{ 'selected': isSelected(element.id), 'hover': hoveredId === element.id }"
-        @click.stop="handleLayerClick(element.id, $event)"
-        @mouseenter="hoveredId = element.id"
-        @mouseleave="hoveredId = null"
-      >
-        <div class="layer-thumbnail">
-          <div class="thumbnail-content" :style="getThumbnailStyle(element)">
-            <LayerThumbnail :element="element" />
-          </div>
-        </div>
-        <div class="layer-info">
-          <div class="layer-name">{{ getElementName(element, index) }}</div>
-          <div class="layer-type">{{ getElementTypeLabel(element.type) }}</div>
-        </div>
-      </div>
+        :element="element"
+        :index="index"
+        :selected-element-ids="selectedElementIds"
+        :hovered-id="hoveredId"
+        :dragged-index="draggedIndex"
+        :drag-over-index="dragOverIndex"
+        :drag-position="dragPosition"
+        :expanded-group-ids="expandedGroupIds"
+        @select-element="handleSelectElement"
+        @hover-element="hoveredId = $event"
+        @toggle-group="toggleGroup"
+        @drag-start="handleDragStart"
+        @drag-over="handleDragOver"
+        @drop="handleDrop"
+        @drag-end="handleDragEnd"
+      />
+      
       <div v-if="elements.length === 0" class="empty-state">
         <div class="empty-text">暂无元素</div>
       </div>
@@ -32,8 +33,8 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import type { CanvasElement, ShapeElement, ImageElement, TextElement } from '../types/canvas'
-import LayerThumbnail from './LayerThumbnail.vue'
+import type { CanvasElement, ShapeElement, ImageElement, TextElement, GroupElement } from '../types/canvas'
+import LayerTreeItem from './LayerTreeItem.vue'
 
 interface Props {
   elements: CanvasElement[]
@@ -44,73 +45,157 @@ const props = defineProps<Props>()
 
 const emit = defineEmits<{
   selectElement: [elementId: string, ctrlKey: boolean]
+  reorderElement: [fromIndex: number, toIndex: number]
+  reorderElementInGroup: [groupId: string, fromIndex: number, toIndex: number]
 }>()
 
 const hoveredId = ref<string | null>(null)
+const draggedIndex = ref<number | null>(null)
+const draggedElementId = ref<string | null>(null)
+const draggedParentGroupId = ref<string | undefined>(undefined)
+const dragOverIndex = ref<number | null>(null)
+const dragPosition = ref<'top' | 'bottom' | null>(null)
+const expandedGroupIds = ref<string[]>([])
+
+const handleSelectElement = (elementId: string, ctrlKey: boolean) => {
+  emit('selectElement', elementId, ctrlKey)
+}
+
+// 切换组合展开状态
+const toggleGroup = (groupId: string) => {
+  const index = expandedGroupIds.value.indexOf(groupId)
+  if (index > -1) {
+    expandedGroupIds.value.splice(index, 1)
+  } else {
+    expandedGroupIds.value.push(groupId)
+  }
+}
+
+// 获取组合的子元素（反转顺序显示）
+const getReversedChildren = (group: CanvasElement) => {
+  if (group.type !== 'group') return []
+  return [...(group as GroupElement).children].reverse()
+}
 
 // 反转元素列表，使最新的元素显示在顶部（类似 Figma）
 const reversedElements = computed(() => {
   return [...props.elements].reverse()
 })
 
-const isSelected = (elementId: string) => {
-  return props.selectedElementIds.includes(elementId)
+// 拖拽处理
+const handleDragStart = (index: number, e: DragEvent, elementId: string, parentGroupId?: string) => {
+  if (e.dataTransfer) {
+    draggedIndex.value = index
+    draggedElementId.value = elementId
+    draggedParentGroupId.value = parentGroupId
+    e.dataTransfer.effectAllowed = 'move'
+  }
 }
 
-const handleLayerClick = (elementId: string, event: MouseEvent) => {
-  emit('selectElement', elementId, event.ctrlKey || event.metaKey)
+const handleDragOver = (index: number, e: DragEvent) => {
+  e.preventDefault() // 允许放置
+  
+  if (draggedIndex.value === null || draggedIndex.value === index) {
+    dragOverIndex.value = null
+    dragPosition.value = null
+    return
+  }
+  
+  dragOverIndex.value = index
+  
+  const target = e.currentTarget as HTMLElement
+  const rect = target.getBoundingClientRect()
+  const midY = rect.top + rect.height / 2
+  
+  dragPosition.value = e.clientY < midY ? 'top' : 'bottom'
 }
 
-// 获取元素名称
-const getElementName = (element: CanvasElement, index: number): string => {
-  // 根据元素类型生成名称
-  const typeNames: Record<string, string> = {
-    'rectangle': '矩形',
-    'rounded-rectangle': '圆角矩形',
-    'circle': '圆形',
-    'triangle': '三角形',
-    'image': '图片',
-    'text': '文本'
+const handleDrop = (index: number, e: DragEvent, targetParentGroupId?: string) => {
+  e.preventDefault()
+  
+  if (draggedIndex.value !== null && draggedIndex.value !== index) {
+    // 检查是否在同一个父级内拖动
+    const sameParent = draggedParentGroupId.value === targetParentGroupId
+    
+    if (!sameParent) {
+      // 暂不支持跨组拖动
+      console.warn('暂不支持跨组拖动元素')
+      handleDragEnd()
+      return
+    }
+    
+    // 在同一个父级内重新排序
+    if (draggedParentGroupId.value) {
+      // 组内重新排序
+      const groupId = draggedParentGroupId.value
+      const uiFrom = draggedIndex.value
+      const uiTo = index
+      
+      // 找到这个组，计算其 children 的长度
+      const group = findGroupById(props.elements, groupId)
+      if (!group || group.type !== 'group') {
+        handleDragEnd()
+        return
+      }
+      
+      const len = group.children.length
+      const realFrom = len - 1 - uiFrom
+      
+      let uiTargetIndex = uiTo
+      if (dragPosition.value === 'bottom') {
+        uiTargetIndex += 1
+      }
+      let realTo = len - uiTargetIndex
+      
+      if (realTo > realFrom) {
+        realTo -= 1
+      }
+      
+      emit('reorderElementInGroup', groupId, realFrom, realTo)
+    } else {
+      // 根级重新排序
+      const len = props.elements.length
+      const uiFrom = draggedIndex.value
+      const uiTo = index
+      
+      const realFrom = len - 1 - uiFrom
+      let uiTargetIndex = uiTo
+      if (dragPosition.value === 'bottom') {
+        uiTargetIndex += 1
+      }
+      let realTo = len - uiTargetIndex
+      
+      if (realTo > realFrom) {
+        realTo -= 1
+      }
+      
+      emit('reorderElement', realFrom, realTo)
+    }
   }
   
-  const baseName = typeNames[element.type] || '元素'
-  // 计算在原始列表中的索引（从底部开始计数）
-  const originalIndex = props.elements.length - 1 - index
-  return `${baseName} ${originalIndex + 1}`
+  handleDragEnd()
 }
 
-// 获取元素类型标签
-const getElementTypeLabel = (type: string): string => {
-  const labels: Record<string, string> = {
-    'rectangle': 'Rectangle',
-    'rounded-rectangle': 'Rounded Rectangle',
-    'circle': 'Circle',
-    'triangle': 'Triangle',
-    'image': 'Image',
-    'text': 'Text'
-  }
-  return labels[type] || type
+const handleDragEnd = () => {
+  draggedIndex.value = null
+  draggedElementId.value = null
+  draggedParentGroupId.value = undefined
+  dragOverIndex.value = null
+  dragPosition.value = null
 }
 
-// 获取缩略图样式
-const getThumbnailStyle = (element: CanvasElement) => {
-  // 计算缩略图尺寸，保持宽高比
-  const maxSize = 40
-  const aspectRatio = element.width / element.height
-  
-  let width = maxSize
-  let height = maxSize
-  
-  if (aspectRatio > 1) {
-    height = maxSize / aspectRatio
-  } else {
-    width = maxSize * aspectRatio
+// 递归查找组合元素
+const findGroupById = (list: CanvasElement[], groupId: string): CanvasElement | null => {
+  for (const el of list) {
+    if (el.id === groupId) {
+      return el
+    }
+    if (el.type === 'group') {
+      const found = findGroupById((el as GroupElement).children, groupId)
+      if (found) return found
+    }
   }
-  
-  return {
-    width: `${width}px`,
-    height: `${height}px`
-  }
+  return null
 }
 </script>
 
@@ -159,9 +244,12 @@ const getThumbnailStyle = (element: CanvasElement) => {
 .layer-item {
   display: flex;
   align-items: center;
-  padding: 8px 12px;
+  padding: 8px 10px; /* 增大内边距 */
   cursor: pointer;
   transition: background-color 0.15s ease;
+  height: 48px; /* 增大行高 */
+  border-bottom: 1px solid transparent;
+  border-top: 1px solid transparent;
 }
 
 .layer-item:hover {
@@ -181,13 +269,13 @@ const getThumbnailStyle = (element: CanvasElement) => {
 }
 
 .layer-thumbnail {
-  width: 48px;
-  height: 48px;
+  width: 40px; /* 增大缩略图 */
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  margin-right: 8px;
+  margin-right: 10px;
   background: #f9f9f9;
   border: 1px solid #e5e5e5;
   border-radius: 4px;
@@ -206,11 +294,11 @@ const getThumbnailStyle = (element: CanvasElement) => {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
 
 .layer-name {
-  font-size: 13px;
+  font-size: 13px; /* 增大字体 */
   font-weight: 500;
   color: #333;
   white-space: nowrap;
@@ -223,7 +311,7 @@ const getThumbnailStyle = (element: CanvasElement) => {
 }
 
 .layer-type {
-  font-size: 11px;
+  font-size: 11px; /* 增大字体 */
   color: #999;
   white-space: nowrap;
   overflow: hidden;

@@ -8,6 +8,7 @@ export const mockElements: CanvasElement[] = [
   {
     id: 'rect1',
     type: 'rectangle',
+    name: '矩形 1',
     x: 50,
     y: 50,
     width: 100,
@@ -19,6 +20,7 @@ export const mockElements: CanvasElement[] = [
   {
     id: 'rounded-rect1',
     type: 'rounded-rectangle',
+    name: '圆角矩形 1',
     x: 200,
     y: 50,
     width: 120,
@@ -31,6 +33,7 @@ export const mockElements: CanvasElement[] = [
   {
     id: 'circle1',
     type: 'circle',
+    name: '圆形 1',
     x: 400,
     y: 50,
     width: 80,
@@ -42,6 +45,7 @@ export const mockElements: CanvasElement[] = [
   {
     id: 'triangle1',
     type: 'triangle',
+    name: '三角形 1',
     x: 550,
     y: 50,
     width: 100,
@@ -53,6 +57,7 @@ export const mockElements: CanvasElement[] = [
   {
     id: 'image1',
     type: 'image',
+    name: '图片 1',
     x: 50,
     y: 200,
     width: 150,
@@ -65,6 +70,7 @@ export const mockElements: CanvasElement[] = [
   {
     id: 'image2',
     type: 'image',
+    name: '图片 2',
     x: 220,
     y: 200,
     width: 150,
@@ -78,6 +84,7 @@ export const mockElements: CanvasElement[] = [
   {
     id: 'image3',
     type: 'image',
+    name: '图片 3',
     x: 390,
     y: 200,
     width: 150,
@@ -91,6 +98,7 @@ export const mockElements: CanvasElement[] = [
   {
     id: 'image4',
     type: 'image',
+    name: '图片 4',
     x: 560,
     y: 200,
     width: 150,
@@ -104,6 +112,7 @@ export const mockElements: CanvasElement[] = [
   {
     id: 'text1',
     type: 'text',
+    name: '文本 1',
     x: 50,
     y: 320,
     width: 200,
@@ -122,6 +131,7 @@ export const mockElements: CanvasElement[] = [
   {
     id: 'text2',
     type: 'text',
+    name: '文本 2',
     x: 270,
     y: 320,
     width: 200,
@@ -140,6 +150,7 @@ export const mockElements: CanvasElement[] = [
   {
     id: 'text3',
     type: 'text',
+    name: '文本 3',
     x: 490,
     y: 320,
     width: 200,
@@ -158,6 +169,7 @@ export const mockElements: CanvasElement[] = [
   {
     id: 'text4',
     type: 'text',
+    name: '文本 4',
     x: 50,
     y: 390,
     width: 200,
@@ -176,6 +188,7 @@ export const mockElements: CanvasElement[] = [
   {
     id: 'text5',
     type: 'text',
+    name: '文本 5',
     x: 270,
     y: 390,
     width: 200,
@@ -194,6 +207,7 @@ export const mockElements: CanvasElement[] = [
   {
     id: 'text6',
     type: 'text',
+    name: '文本 6',
     x: 490,
     y: 390,
     width: 200,
@@ -212,6 +226,7 @@ export const mockElements: CanvasElement[] = [
   {
     id: 'text7',
     type: 'text',
+    name: '文本 7',
     x: 50,
     y: 460,
     width: 200,
@@ -230,6 +245,7 @@ export const mockElements: CanvasElement[] = [
   {
     id: 'text8',
     type: 'text',
+    name: '文本 8',
     x: 270,
     y: 460,
     width: 200,
@@ -248,6 +264,7 @@ export const mockElements: CanvasElement[] = [
   {
     id: 'text9',
     type: 'text',
+    name: '文本 9',
     x: 490,
     y: 460,
     width: 200,

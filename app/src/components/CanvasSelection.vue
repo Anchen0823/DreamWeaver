@@ -63,7 +63,7 @@ import { computed, type Ref } from 'vue'
 import type { useElementSelection } from '../composables/useElementSelection'
 import type { useResize } from '../composables/useResize'
 import type { useViewport } from '../composables/useViewport'
-import type { CanvasElement } from '../types/canvas'
+import type { CanvasElement, GroupElement } from '../types/canvas'
 
 interface Props {
   selection: ReturnType<typeof useElementSelection>
@@ -75,6 +75,37 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+
+// 递归查找元素并计算世界坐标
+const findElementWithWorldCoords = (
+  list: CanvasElement[],
+  elementId: string,
+  offsetX = 0,
+  offsetY = 0
+): { element: CanvasElement; worldX: number; worldY: number } | null => {
+  for (const el of list) {
+    if (el.id === elementId) {
+      return {
+        element: el,
+        worldX: el.x + offsetX,
+        worldY: el.y + offsetY
+      }
+    }
+    
+    if (el.type === 'group') {
+      const group = el as GroupElement
+      const found = findElementWithWorldCoords(
+        group.children,
+        elementId,
+        offsetX + el.x,
+        offsetY + el.y
+      )
+      if (found) return found
+    }
+  }
+  
+  return null
+}
 
 const selectedElementIds = computed(() => props.selection.selectedElementIds.value)
 const isSelecting = computed(() => props.selection.isSelecting.value)
@@ -126,7 +157,8 @@ const handleResizeMouseDown = (
 }
 
 const getElement = (elementId: string) => {
-  return props.elements.value.find(el => el.id === elementId)
+  const found = findElementWithWorldCoords(props.elements.value, elementId)
+  return found ? found.element : null
 }
 
 const formatSize = (elementId: string) => {
@@ -138,15 +170,19 @@ const formatSize = (elementId: string) => {
 }
 
 const getSizeLabelStyle = (elementId: string) => {
-  const element = getElement(elementId)
-  if (!element) return { display: 'none' }
+  const found = findElementWithWorldCoords(props.elements.value, elementId)
+  if (!found) return { display: 'none' }
+  
+  const element = found.element
+  const worldX = found.worldX
+  const worldY = found.worldY
   
   // 使用画布坐标系，与选中框和工具栏的计算方式一致
   // 标签显示在元素下方中心
   const padding = 4
   const scaledPadding = padding * props.viewport.scale.value
-  const labelX = element.x * props.viewport.scale.value - scaledPadding + (element.width * props.viewport.scale.value + scaledPadding * 2) / 2
-  const labelY = element.y * props.viewport.scale.value - scaledPadding + element.height * props.viewport.scale.value + scaledPadding * 2 + 8 / props.viewport.zoom.value // 下方 8px（屏幕像素），需要除以 zoom 转换为画布坐标
+  const labelX = worldX * props.viewport.scale.value - scaledPadding + (element.width * props.viewport.scale.value + scaledPadding * 2) / 2
+  const labelY = worldY * props.viewport.scale.value - scaledPadding + element.height * props.viewport.scale.value + scaledPadding * 2 + 8 / props.viewport.zoom.value // 下方 8px（屏幕像素），需要除以 zoom 转换为画布坐标
   
   return {
     position: 'absolute',

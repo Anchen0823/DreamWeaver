@@ -2,7 +2,7 @@
   <div
     :class="['element', element.type, { 'selected': isSelected }]"
     :style="elementStyle"
-    @mousedown.stop="$emit('elementMouseDown', element.id, $event)"
+    @mousedown="handleMouseDown"
   >
     <!-- 图形元素 -->
     <template v-if="isShape">
@@ -44,12 +44,46 @@
         class="text-edit-input"
       ></textarea>
     </template>
+    
+    <!-- 画笔元素 -->
+    <template v-else-if="element.type === 'brush'">
+      <svg
+        :style="brushSvgStyle"
+        class="brush-content"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          :d="brushPath"
+          :stroke="brushColor"
+          :stroke-width="brushStrokeWidth"
+          :stroke-linecap="brushLineCap"
+          :stroke-linejoin="brushLineJoin"
+          fill="none"
+        />
+      </svg>
+    </template>
+    
+    <!-- 组合元素（递归渲染） -->
+    <template v-else-if="element.type === 'group'">
+      <div class="group-content">
+        <CanvasElement
+          v-for="child in (element as GroupElement).children"
+          :key="child.id"
+          :element="child"
+          :scale="scale"
+          :is-selected="false" 
+          :is-editing="false"
+          :active-tool="activeTool"
+          @element-mouse-down="handleChildMouseDown"
+        />
+      </div>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import type { CanvasElement, ShapeElement, ImageElement, TextElement } from '../types/canvas'
+import type { CanvasElement, ShapeElement, ImageElement, TextElement, BrushElement, GroupElement } from '../types/canvas'
 import { getElementStyle, getImageStyle, getTextStyle, formatTextContent } from '../utils/style-calculator'
 
 interface Props {
@@ -57,6 +91,7 @@ interface Props {
   scale: number
   isSelected: boolean
   isEditing: boolean
+  activeTool?: string | null
 }
 
 const props = defineProps<Props>()
@@ -125,6 +160,96 @@ const textEditStyle = computed(() => {
     zIndex: 10001
   }
 })
+
+// 画笔元素相关计算属性
+const brushElement = computed(() => {
+  if (props.element.type !== 'brush') return null
+  return props.element as BrushElement
+})
+
+const brushPath = computed(() => {
+  if (!brushElement.value || brushElement.value.points.length === 0) {
+    return ''
+  }
+  
+  const points = brushElement.value.points
+  if (points.length === 1) {
+    // 单个点，绘制一个小圆
+    return `M ${points[0].x} ${points[0].y} m -${brushElement.value.strokeWidth / 2}, 0 a ${brushElement.value.strokeWidth / 2},${brushElement.value.strokeWidth / 2} 0 1,0 ${brushElement.value.strokeWidth},0 a ${brushElement.value.strokeWidth / 2},${brushElement.value.strokeWidth / 2} 0 1,0 -${brushElement.value.strokeWidth},0`
+  }
+  
+  // 多个点，使用路径连接
+  let path = `M ${points[0].x} ${points[0].y}`
+  for (let i = 1; i < points.length; i++) {
+    path += ` L ${points[i].x} ${points[i].y}`
+  }
+  
+  return path
+})
+
+const brushColor = computed(() => {
+  return brushElement.value?.color || '#ff6b6b'
+})
+
+const brushStrokeWidth = computed(() => {
+  return brushElement.value ? (brushElement.value.strokeWidth * props.scale) : 5
+})
+
+const brushLineCap = computed(() => {
+  return brushElement.value?.lineCap || 'round'
+})
+
+const brushLineJoin = computed(() => {
+  return brushElement.value?.lineJoin || 'round'
+})
+
+const brushSvgStyle = computed(() => {
+  return {
+    width: '100%',
+    height: '100%',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    pointerEvents: 'none'
+  }
+})
+
+// 处理鼠标按下事件
+const handleMouseDown = (e: MouseEvent) => {
+  // 如果是画笔模式，不阻止事件传播，让事件冒泡到容器以便在元素上绘制
+  if (props.activeTool === 'brush') {
+    // 不调用 stopPropagation，让事件继续冒泡到容器
+    // 这样可以从元素框内起笔
+    return
+  }
+  
+  // 其他模式下阻止事件冒泡并正常处理
+  e.stopPropagation()
+  emit('elementMouseDown', props.element.id, e)
+}
+
+// 处理子元素鼠标按下
+const handleChildMouseDown = (elementId: string, event: MouseEvent) => {
+  // 子元素事件冒泡到这里时，我们捕获它并发送父组合的ID（即当前element.id）
+  // 除非我们需要深入选择（Deep Select，暂不支持，所以默认选择组）
+  // 注意：如果我们想让点击子元素选中整个组，我们应该emit当前组的ID
+  
+  // 在递归结构中，点击子元素会触发子组件的 emit('elementMouseDown')
+  // 然后被这里的 handleChildMouseDown 捕获
+  // 我们不再继续 emit 子元素的 ID，而是让父级的 handleMouseDown（上面那个）处理
+  // 或者，因为我们点击的是 group div 内部，事件会冒泡到 div，
+  // 触发 @mousedown="handleMouseDown"
+  
+  // 实际上，递归的 CanvasElement 也会渲染 div 并绑定 @mousedown
+  // 如果子元素点击了，stop propagation 会被调用，所以外层 div 收不到 click
+  // 因此我们需要在这里重新 emit
+  
+  // 策略：组合行为通常是“点击任何子元素 = 选中组合”
+  // 所以我们应该拦截子元素的事件，并将其转换为选中当前组合的事件
+  
+  // 重新发出事件，但使用当前组合的ID
+  emit('elementMouseDown', props.element.id, event)
+}
 </script>
 
 <style scoped>
@@ -134,6 +259,19 @@ const textEditStyle = computed(() => {
 
 .element:hover {
   opacity: 0.9;
+}
+
+/* 组合内容容器 */
+.group-content {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  pointer-events: none; /* 让事件穿透到子元素，或者由父级捕获 */
+}
+
+/* 确保子元素可以接收指针事件 */
+.group-content > .element {
+  pointer-events: auto;
 }
 
 /* 三角形轮廓渲染 */
@@ -200,6 +338,11 @@ const textEditStyle = computed(() => {
 .text-edit-input:focus {
   outline: none;
   box-shadow: none;
+}
+
+.brush-content {
+  user-select: none;
+  pointer-events: none;
 }
 </style>
 

@@ -5,10 +5,12 @@ import type { useCanvasInteraction } from './useCanvasInteraction'
 import type { useElementSelection } from './useElementSelection'
 import type { useClipboard } from './useClipboard'
 import type { useDrawing } from './useDrawing'
+import type { useBrushDrawing } from './useBrushDrawing'
 import type { useTextEditing } from './useTextEditing'
 import type { useResize } from './useResize'
 import type { useElementDrag } from './useElementDrag'
 import type { useElementZoom } from './useElementZoom'
+import type { useElementGrouping } from './useElementGrouping'
 import { screenToCanvas } from '../utils/coordinate-utils'
 
 /**
@@ -24,11 +26,14 @@ export function useCanvasEvents(
   selection: ReturnType<typeof useElementSelection>,
   clipboard: ReturnType<typeof useClipboard>,
   drawing: ReturnType<typeof useDrawing>,
+  brushDrawing: ReturnType<typeof useBrushDrawing> | null,
   textEditing: ReturnType<typeof useTextEditing>,
   resize: ReturnType<typeof useResize>,
   elementDrag: ReturnType<typeof useElementDrag>,
   elementZoom: ReturnType<typeof useElementZoom>,
-  onToolChange: (tool: string | null) => void
+  grouping: ReturnType<typeof useElementGrouping>,
+  onToolChange: (tool: string | null) => void,
+  generateDefaultName: (type: string) => string
 ) {
   // 处理容器鼠标按下事件
   const handleContainerMouseDown = (e: MouseEvent) => {
@@ -46,19 +51,45 @@ export function useCanvasEvents(
       return
     }
     
-    // 如果点击的是元素，不触发绘制或框选
+    // 如果点击的是文本工具栏，不触发框选或绘制
     const target = e.target as HTMLElement
+    if (target.closest('.text-toolbar') || target.closest('.shape-toolbar') || target.closest('.image-toolbar')) {
+      return
+    }
+
+    // 获取当前激活的工具
+    const tool = activeTool.value
+    
+    // 处理画笔工具（画笔模式下，即使点击元素也可以绘制）
+    if (tool === 'brush' && brushDrawing) {
+      if (e.button === 0) {
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+        
+        // 转换为画布坐标
+        const canvasPos = screenToCanvas(
+          e.clientX,
+          e.clientY,
+          rect,
+          viewport.viewportOffsetX.value,
+          viewport.viewportOffsetY.value,
+          viewport.zoom.value,
+          viewport.scale.value
+        )
+        
+        // 开始画笔绘制（即使点击的是元素也可以绘制）
+        brushDrawing.startDrawing(canvasPos)
+        
+        e.preventDefault()
+        return
+      }
+    }
+
+    // 如果点击的是元素，不触发绘制或框选（画笔工具除外，已在上面处理）
     if (target.closest('.element') && !target.closest('.preview')) {
       return
     }
 
-    // 如果点击的是文本工具栏，不触发框选
-    if (target.closest('.text-toolbar')) {
-      return
-    }
-
     // 如果有激活的工具，开始绘制
-    const tool = activeTool.value
     if (tool && (tool === 'rectangle' || tool === 'rounded-rectangle' || tool === 'circle' || tool === 'triangle' || tool === 'text' || tool === 'image')) {
       if (e.button === 0) {
         // 图片工具需要先选择图片
@@ -140,10 +171,21 @@ export function useCanvasEvents(
       if (drawing.isDrawing.value) {
         drawing.updateDrawing(canvasPos)
       }
+      
+      // 如果正在画笔绘制，添加点
+      if (brushDrawing && brushDrawing.isDrawing.value) {
+        brushDrawing.addPoint(canvasPos)
+      }
     }
 
     // 如果正在绘制，不处理其他交互
     if (drawing.isDrawing.value) {
+      e.preventDefault()
+      return
+    }
+    
+    // 如果正在画笔绘制，不处理其他交互
+    if (brushDrawing && brushDrawing.isDrawing.value) {
       e.preventDefault()
       return
     }
@@ -179,6 +221,22 @@ export function useCanvasEvents(
     // 如果正在拖拽元素，结束元素拖拽
     if (elementDrag.isDragging.value) {
       elementDrag.endDrag()
+      if (e) {
+        e.preventDefault()
+      }
+      return
+    }
+
+    // 如果正在画笔绘制，完成画笔绘制
+    if (brushDrawing && brushDrawing.isDrawing.value) {
+      const newElement = brushDrawing.finishDrawing()
+      
+      if (e && newElement) {
+        elements.value.push(newElement)
+        // 画笔绘制完成后，保持画笔模式，不选中元素，不切换工具
+        // 这样用户可以连续绘制多笔
+      }
+      
       if (e) {
         e.preventDefault()
       }
@@ -277,8 +335,36 @@ export function useCanvasEvents(
     // Ctrl/Cmd + V: 粘贴
     if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) {
       if (clipboard.clipboard.value.length > 0) {
-        const newElements = clipboard.pasteElements(elements.value, selection.selectedElementIds)
+        const newElements = clipboard.pasteElements(
+          elements.value, 
+          selection.selectedElementIds,
+          generateDefaultName
+        )
         elements.value.push(...newElements)
+        e.preventDefault()
+      }
+      return
+    }
+
+    // Ctrl/Cmd + G: 编组
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'g' || e.key === 'G')) {
+      if (selection.selectedElementIds.value.length >= 2) {
+        grouping.groupElements()
+        e.preventDefault()
+      }
+      return
+    }
+
+    // Ctrl/Cmd + Shift + G: 解组
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'g' || e.key === 'G')) {
+      // 检查是否有选中组合元素
+      const hasGroup = selection.selectedElementIds.value.some(id => {
+        const element = elements.value.find(el => el.id === id)
+        return element && element.type === 'group'
+      })
+      
+      if (hasGroup) {
+        grouping.ungroupElements()
         e.preventDefault()
       }
       return

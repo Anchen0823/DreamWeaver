@@ -9,6 +9,9 @@ export interface BaseElement {
   // 元素类型
   type: ElementType
   
+  // 元素名称（用户可编辑）
+  name?: string
+  
   // 位置坐标（相对于画布左上角）
   x: number
   y: number
@@ -40,6 +43,7 @@ export type ElementType =
   | 'triangle'            // 三角形
   | 'image'               // 图片
   | 'text'                // 富文本
+  | 'brush'               // 画笔痕迹
   | 'group'               // 组合（未来扩展）
 
 /**
@@ -118,9 +122,48 @@ export interface TextElement extends BaseElement {
 }
 
 /**
+ * 画笔痕迹点坐标
+ */
+export interface BrushPoint {
+  x: number  // X坐标（相对于元素左上角）
+  y: number  // Y坐标（相对于元素左上角）
+  pressure?: number  // 压力值（0-1，可选，用于未来支持压感）
+}
+
+/**
+ * 画笔痕迹元素接口
+ */
+export interface BrushElement extends BaseElement {
+  type: 'brush'
+  
+  // 路径点数组（相对于元素左上角的坐标）
+  points: BrushPoint[]
+  
+  // 画笔颜色（CSS颜色值）
+  color: string
+  
+  // 画笔宽度（像素）
+  strokeWidth: number
+  
+  // 画笔样式（可选）
+  lineCap?: 'butt' | 'round' | 'square'  // 线帽样式
+  lineJoin?: 'miter' | 'round' | 'bevel'  // 连接样式
+}
+
+/**
+ * 组合元素接口
+ */
+export interface GroupElement extends BaseElement {
+  type: 'group'
+  
+  // 子元素列表
+  children: CanvasElement[]
+}
+
+/**
  * 画布元素联合类型
  */
-export type CanvasElement = ShapeElement | ImageElement | TextElement
+export type CanvasElement = ShapeElement | ImageElement | TextElement | BrushElement | GroupElement
 
 /**
  * 画布配置接口

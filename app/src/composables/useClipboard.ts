@@ -39,7 +39,11 @@ export function useClipboard() {
   }
 
   // 粘贴元素
-  const pasteElements = (elements: CanvasElement[], selectedIds: { value: string[] }) => {
+  const pasteElements = (
+    elements: CanvasElement[], 
+    selectedIds: { value: string[] },
+    generateName?: (type: string) => string
+  ) => {
     if (clipboard.value.length === 0) {
       return []
     }
@@ -65,10 +69,97 @@ export function useClipboard() {
       offsetY = mouseY.value - centerY
     }
 
-    // 创建新元素并添加到画布
-    const newElements: CanvasElement[] = clipboard.value.map(element => {
+    // 如果提供了生成名称的函数，预先计算每种类型的起始编号
+    const typeCounters: Record<string, number> = {}
+    
+    if (generateName) {
+      // 查找每种类型的最大编号
+      const findMaxNumber = (list: CanvasElement[], targetType: string): number => {
+        let maxNum = 0
+        for (const el of list) {
+          if (el.type === targetType && el.name) {
+            const match = el.name.match(/\d+$/)
+            if (match) {
+              const num = parseInt(match[0], 10)
+              if (num > maxNum) {
+                maxNum = num
+              }
+            }
+          }
+          if (el.type === 'group' && 'children' in el) {
+            const childMaxNum = findMaxNumber((el as any).children || [], targetType)
+            if (childMaxNum > maxNum) {
+              maxNum = childMaxNum
+            }
+          }
+        }
+        return maxNum
+      }
+      
+      // 统计剪贴板中所有元素类型（包括嵌套的）
+      const collectTypes = (list: CanvasElement[]): Set<string> => {
+        const types = new Set<string>()
+        for (const el of list) {
+          types.add(el.type)
+          if (el.type === 'group' && 'children' in el) {
+            const childTypes = collectTypes((el as any).children || [])
+            childTypes.forEach(t => types.add(t))
+          }
+        }
+        return types
+      }
+      
+      const allTypes = collectTypes(clipboard.value)
+      allTypes.forEach(type => {
+        typeCounters[type] = findMaxNumber(elements, type) + 1
+      })
+    }
+    
+    // 生成唯一名称的辅助函数
+    const generateUniqueName = (type: string): string => {
+      if (!generateName) {
+        return ''
+      }
+      
+      const typeNames: Record<string, string> = {
+        'rectangle': '矩形',
+        'rounded-rectangle': '圆角矩形',
+        'circle': '圆形',
+        'triangle': '三角形',
+        'image': '图片',
+        'text': '文本',
+        'brush': '画笔',
+        'group': '组合'
+      }
+      
+      const baseName = typeNames[type] || '元素'
+      const number = typeCounters[type] || 1
+      typeCounters[type] = number + 1
+      
+      return `${baseName} ${number}`
+    }
+
+    // 递归更新元素（包括组合内的子元素）
+    const updateElement = (element: CanvasElement): CanvasElement => {
       const newElement = deepCloneElement(element)
       newElement.id = generateNewElementId(element.type)
+      
+      // 如果提供了生成名称的函数，更新元素名称
+      if (generateName) {
+        newElement.name = generateUniqueName(element.type)
+      }
+      
+      // 如果是组合元素，递归更新子元素
+      if (newElement.type === 'group' && 'children' in newElement) {
+        newElement.children = newElement.children.map(child => updateElement(child))
+      }
+      
+      return newElement
+    }
+
+    // 创建新元素并添加到画布
+    const newElements: CanvasElement[] = clipboard.value.map(element => {
+      const newElement = updateElement(element)
       newElement.x = element.x + offsetX
       newElement.y = element.y + offsetY
       return newElement

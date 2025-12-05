@@ -188,7 +188,7 @@ export function useResize(
     const elementIndex = elements.value.findIndex(el => el.id === resizeElementId.value)
     if (elementIndex !== -1) {
       const newElements = [...elements.value]
-      const updatedElement = { ...newElements[elementIndex] }
+      const updatedElement = { ...newElements[elementIndex] } as CanvasElement
       updatedElement.x = newX
       updatedElement.y = newY
       updatedElement.width = newWidth

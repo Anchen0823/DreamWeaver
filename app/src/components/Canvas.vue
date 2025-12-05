@@ -6,14 +6,16 @@
     @mouseup="events.handleContainerMouseUp"
     @mouseleave="events.handleContainerMouseUp"
     @wheel="events.handleContainerWheel"
+    @contextmenu="handleContextMenu"
     :class="{ 
       'is-dragging': interaction.isDragging.value, 
       'can-drag': interaction.isSpacePressed.value,
       'is-drawing': drawing.isDrawing.value,
       'is-dragging-element': elementDrag.isDragging.value,
-      'tool-active': !!props.activeTool && props.activeTool !== 'text' && props.activeTool !== 'image',
+      'tool-active': !!props.activeTool && props.activeTool !== 'text' && props.activeTool !== 'image' && props.activeTool !== 'brush',
       'tool-text': props.activeTool === 'text',
-      'tool-image': props.activeTool === 'image' && drawing.pendingImageData.value
+      'tool-image': props.activeTool === 'image' && drawing.pendingImageData.value,
+      'tool-brush': props.activeTool === 'brush'
     }"
     :style="viewport.gridBackgroundStyle.value"
     ref="containerRef"
@@ -31,6 +33,7 @@
         :scale="viewport.scale.value"
         :is-selected="selection.isElementSelected(element.id)"
         :is-editing="textEditing.editingTextElementId.value === element.id"
+        :active-tool="props.activeTool"
         @element-mouse-down="handleElementMouseDown"
         @text-double-click="textEditing.handleTextDoubleClick"
         @text-edit-input="textEditing.handleTextEditInput"
@@ -92,18 +95,44 @@
         @update:border-radius="handleShapePropertyUpdate('borderRadius', $event)"
       />
       
+      <!-- 画笔元素浮动工具栏 -->
+      <BrushElementToolbar
+        v-if="selectedBrushElement"
+        :brush-element="selectedBrushElement"
+        :visible="!!selectedBrushElement"
+        :position="brushElementToolbarPosition"
+        :scale="viewport.scale.value"
+        @update:color="handleBrushElementPropertyUpdate('color', $event)"
+        @update:stroke-width="handleBrushElementPropertyUpdate('strokeWidth', $event)"
+      />
+      
       <!-- 绘制预览 -->
       <CanvasPreview
         :drawing="drawing"
+        :brush-drawing="brushDrawing"
         :viewport="viewport"
       />
     </div>
+    
+    <!-- 右键菜单 -->
+    <ContextMenu
+      :visible="contextMenu.visible"
+      :position="contextMenu.position"
+      :selected-elements="contextMenu.selectedElements"
+      :has-clipboard="clipboard.clipboard.value.length > 0"
+      @copy="handleContextMenuCopy"
+      @paste="handleContextMenuPaste"
+      @delete="handleContextMenuDelete"
+      @group="handleContextMenuGroup"
+      @ungroup="handleContextMenuUngroup"
+      @close="closeContextMenu"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, toRef } from 'vue'
-import type { TextElement, ImageElement, ShapeElement, CanvasElement as CanvasElementType } from '../types/canvas'
+import type { TextElement, ImageElement, ShapeElement, BrushElement, GroupElement, CanvasElement as CanvasElementType } from '../types/canvas'
 import { useViewport } from '../composables/useViewport'
 import { useCanvasInteraction } from '../composables/useCanvasInteraction'
 import { useElementSelection } from '../composables/useElementSelection'
@@ -111,18 +140,22 @@ import { useClipboard } from '../composables/useClipboard'
 import { usePersistence } from '../composables/usePersistence'
 import { useTextEditing } from '../composables/useTextEditing'
 import { useDrawing } from '../composables/useDrawing'
+import { useBrushDrawing } from '../composables/useBrushDrawing'
 import { useElementCreation } from '../composables/useElementCreation'
 import { useResize } from '../composables/useResize'
 import { useElementDrag } from '../composables/useElementDrag'
 import { useElementZoom } from '../composables/useElementZoom'
+import { useElementGrouping } from '../composables/useElementGrouping'
 import { useCanvasEvents } from '../composables/useCanvasEvents'
 import { mockElements } from '../utils/mock-data'
 import TextToolbar from './TextToolbar.vue'
 import ImageToolbar from './ImageToolbar.vue'
 import ShapeToolbar from './ShapeToolbar.vue'
+import BrushElementToolbar from './BrushElementToolbar.vue'
 import CanvasElement from './CanvasElement.vue'
 import CanvasSelection from './CanvasSelection.vue'
 import CanvasPreview from './CanvasPreview.vue'
+import ContextMenu from './ContextMenu.vue'
 
 // Props
 const props = defineProps<{
@@ -159,7 +192,15 @@ const elementCreation = useElementCreation(elements, selection)
 const drawing = useDrawing(
   viewport,
   elementCreation.generateId,
-  elementCreation.calculateFontSizeFromBoxSize
+  elementCreation.calculateFontSizeFromBoxSize,
+  elementCreation.generateDefaultName
+)
+
+// 画笔绘制管理
+const brushDrawing = useBrushDrawing(
+  viewport,
+  elementCreation.generateId,
+  elementCreation.generateDefaultName
 )
 
 // 文本编辑
@@ -173,6 +214,21 @@ const elementDrag = useElementDrag(elements, viewport, selection)
 
 // 元素缩放
 const elementZoom = useElementZoom(elements, viewport, selection)
+
+// 元素组合
+const grouping = useElementGrouping(
+  elements,
+  selection,
+  elementCreation.generateId,
+  elementCreation.generateDefaultName
+)
+
+// 上下文菜单状态
+const contextMenu = ref({
+  visible: false,
+  position: { x: 0, y: 0 },
+  selectedElements: [] as CanvasElementType[]
+})
 
 // 选中的图片元素（单选且为图片类型时）
 const selectedImageElement = computed<ImageElement | null>(() => {
@@ -194,6 +250,16 @@ const selectedShapeElement = computed<ShapeElement | null>(() => {
   return element && (element.type === 'rectangle' || element.type === 'rounded-rectangle' || element.type === 'circle' || element.type === 'triangle') 
     ? (element as ShapeElement) 
     : null
+})
+
+// 选中的画笔元素（单选且为画笔类型时）
+const selectedBrushElement = computed<BrushElement | null>(() => {
+  if (selection.selectedElementIds.value.length !== 1) {
+    return null
+  }
+  const elementId = selection.selectedElementIds.value[0]
+  const element = elements.value.find(el => el.id === elementId)
+  return element && element.type === 'brush' ? (element as BrushElement) : null
 })
 
 // 文本工具栏位置（使用画布坐标系，与选中框一致）
@@ -250,6 +316,24 @@ const shapeToolbarPosition = computed(() => {
   return { x: toolbarX, y: toolbarY }
 })
 
+// 画笔元素工具栏位置（使用画布坐标系，与选中框一致）
+const brushElementToolbarPosition = computed(() => {
+  const selectedBrush = selectedBrushElement.value
+  if (!selectedBrush) {
+    return { x: 0, y: 0 }
+  }
+  
+  const element = selectedBrush
+  
+  // 使用画布坐标系，与选中框的计算方式一致
+  // 位置会通过 .canvas 的 transform 自动应用视口偏移和缩放
+  // 工具栏显示在元素上方居中，偏移量需要考虑 zoom（因为 .canvas 有 scale(zoom)）
+  const toolbarX = element.x * viewport.scale.value + (element.width * viewport.scale.value) / 2
+  const toolbarY = element.y * viewport.scale.value - 70 / viewport.zoom.value // 元素上方 70px（屏幕像素），需要除以 zoom 转换为画布坐标
+  
+  return { x: toolbarX, y: toolbarY }
+})
+
 // 处理文本属性更新
 const handleTextPropertyUpdate = (property: string, value: any) => {
   const selectedText = textEditing.selectedTextElement.value
@@ -286,6 +370,11 @@ const handleElementMouseDown = (elementId: string, e: MouseEvent) => {
   const target = e.target as HTMLElement
   if (target.closest('.resize-handle')) {
     // 调整大小的处理在 CanvasSelection 组件中
+    return
+  }
+  
+  // 如果是画笔模式，不处理元素选择，允许在元素上绘制
+  if (props.activeTool === 'brush') {
     return
   }
   
@@ -365,6 +454,70 @@ const handleShapePropertyUpdate = (property: string, value: any) => {
   elements.value = newElements
 }
 
+// 处理画笔元素属性更新
+const handleBrushElementPropertyUpdate = (property: string, value: any) => {
+  const selectedBrush = selectedBrushElement.value
+  if (!selectedBrush) {
+    return
+  }
+  
+  const elementId = selectedBrush.id
+  const elementIndex = elements.value.findIndex(el => el.id === elementId)
+  if (elementIndex === -1) {
+    return
+  }
+  
+  const element = elements.value[elementIndex] as BrushElement
+  if (element.type !== 'brush') {
+    return
+  }
+  
+  // 创建新数组以确保响应式更新
+  const newElements = [...elements.value]
+  const updatedElement = { ...newElements[elementIndex] } as BrushElement
+  
+  // 更新属性
+  ;(updatedElement as any)[property] = value
+  
+  // 如果更新的是 strokeWidth，需要重新计算边界框
+  if (property === 'strokeWidth' && updatedElement.points.length > 0) {
+    // 重新计算边界框
+    const halfStroke = value / 2
+    const firstPoint = updatedElement.points[0]!
+    let minX = firstPoint.x - halfStroke
+    let minY = firstPoint.y - halfStroke
+    let maxX = firstPoint.x + halfStroke
+    let maxY = firstPoint.y + halfStroke
+
+    for (const point of updatedElement.points) {
+      minX = Math.min(minX, point.x - halfStroke)
+      minY = Math.min(minY, point.y - halfStroke)
+      maxX = Math.max(maxX, point.x + halfStroke)
+      maxY = Math.max(maxY, point.y + halfStroke)
+    }
+    
+    // 更新元素位置和尺寸
+    const currentX = updatedElement.x
+    const currentY = updatedElement.y
+    updatedElement.x = currentX + minX
+    updatedElement.y = currentY + minY
+    updatedElement.width = maxX - minX
+    updatedElement.height = maxY - minY
+    
+    // 调整所有点的坐标，使其相对于新的左上角
+    const offsetX = minX
+    const offsetY = minY
+    updatedElement.points = updatedElement.points.map(p => ({
+      x: p.x - offsetX,
+      y: p.y - offsetY
+    }))
+  }
+  
+  // 替换元素
+  newElements[elementIndex] = updatedElement
+  elements.value = newElements
+}
+
 // 事件处理
 const events = useCanvasEvents(
   containerRef,
@@ -375,11 +528,14 @@ const events = useCanvasEvents(
   selection,
   clipboard,
   drawing,
+  brushDrawing,
   textEditing,
   resize,
   elementDrag,
   elementZoom,
-  (tool) => emit('update:activeTool', tool)
+  grouping,
+  (tool) => emit('update:activeTool', tool),
+  elementCreation.generateDefaultName
 )
 
 // 监听activeTool变化，取消绘制状态
@@ -387,11 +543,19 @@ watch(() => props.activeTool, (newTool) => {
   if (!newTool && drawing.isDrawing.value) {
     drawing.cancelDrawing()
   }
+  // 如果切换到非画笔工具，取消画笔绘制
+  if (newTool !== 'brush' && brushDrawing.isDrawing.value) {
+    brushDrawing.cancelDrawing()
+  }
   // 如果切换到非图片工具，清除待插入的图片数据
   if (newTool !== 'image') {
     drawing.pendingImageData.value = null
   }
 })
+
+// 暴露画笔属性供外部访问
+const getBrushColor = () => brushDrawing.defaultColor.value
+const getBrushStrokeWidth = () => brushDrawing.defaultStrokeWidth.value
 
 // 监听选中状态变化，当取消选中时检查并删除空的新创建文本元素
 watch(() => selection.selectedElementIds.value, (newIds, oldIds) => {
@@ -408,6 +572,23 @@ watch(() => selection.selectedElementIds.value, (newIds, oldIds) => {
       textEditing.checkAndDeleteEmptyNewText(elementId)
     }
   })
+})
+
+// 全局点击事件，关闭上下文菜单
+const handleGlobalClick = () => {
+  if (contextMenu.value.visible) {
+    closeContextMenu()
+  }
+}
+
+// 组件挂载时添加全局点击事件监听
+onMounted(() => {
+  document.addEventListener('click', handleGlobalClick)
+})
+
+// 组件卸载时移除全局点击事件监听
+onUnmounted(() => {
+  document.removeEventListener('click', handleGlobalClick)
 })
 
 // 处理图片选择
@@ -427,12 +608,166 @@ const addText = async () => {
   }
 }
 
+// 更新画笔颜色
+const updateBrushColor = (color: string) => {
+  brushDrawing.setColor(color)
+}
+
+// 更新画笔宽度
+const updateBrushStrokeWidth = (width: number) => {
+  brushDrawing.setStrokeWidth(width)
+}
+
+// 重新排序元素
+const reorderElement = (fromIndex: number, toIndex: number) => {
+  if (fromIndex < 0 || fromIndex >= elements.value.length || 
+      toIndex < 0 || toIndex > elements.value.length || 
+      fromIndex === toIndex) {
+    return
+  }
+  
+  const element = elements.value[fromIndex]
+  const newElements = [...elements.value]
+  
+  // 移除元素
+  newElements.splice(fromIndex, 1)
+  // 插入元素到新位置
+  newElements.splice(toIndex, 0, element)
+  
+  elements.value = newElements
+}
+
+// 处理右键菜单
+const handleContextMenu = (e: MouseEvent) => {
+  e.preventDefault()
+  
+  // 如果没有选中元素，不显示菜单
+  if (selection.selectedElementIds.value.length === 0) {
+    closeContextMenu()
+    return
+  }
+  
+  // 获取选中的元素
+  const selectedElements = selection.selectedElementIds.value
+    .map(id => elements.value.find(el => el.id === id))
+    .filter((el): el is CanvasElementType => el !== undefined)
+  
+  // 显示上下文菜单
+  contextMenu.value = {
+    visible: true,
+    position: { x: e.clientX, y: e.clientY },
+    selectedElements
+  }
+  
+  // 更新鼠标位置（用于粘贴）
+  if (containerRef.value) {
+    const rect = containerRef.value.getBoundingClientRect()
+    const canvasX = (e.clientX - rect.left - viewport.viewportOffsetX.value) / viewport.zoom.value / viewport.scale.value
+    const canvasY = (e.clientY - rect.top - viewport.viewportOffsetY.value) / viewport.zoom.value / viewport.scale.value
+    clipboard.updateMousePosition(canvasX, canvasY)
+  }
+}
+
+// 关闭上下文菜单
+const closeContextMenu = () => {
+  contextMenu.value.visible = false
+}
+
+// 处理上下文菜单：复制
+const handleContextMenuCopy = () => {
+  clipboard.copySelectedElements(selection.selectedElementIds.value, elements.value)
+}
+
+// 处理上下文菜单：粘贴
+const handleContextMenuPaste = () => {
+  if (clipboard.clipboard.value.length > 0) {
+    const newElements = clipboard.pasteElements(
+      elements.value, 
+      selection.selectedElementIds,
+      elementCreation.generateDefaultName
+    )
+    elements.value.push(...newElements)
+  }
+}
+
+// 处理上下文菜单：删除
+const handleContextMenuDelete = () => {
+  if (selection.selectedElementIds.value.length > 0) {
+    const selectedIds = selection.selectedElementIds.value
+    elements.value = elements.value.filter(element => !selectedIds.includes(element.id))
+    selection.selectedElementIds.value = []
+  }
+}
+
+// 处理上下文菜单：编组
+const handleContextMenuGroup = () => {
+  if (selection.selectedElementIds.value.length >= 2) {
+    grouping.groupElements()
+  }
+}
+
+// 处理上下文菜单：解组
+const handleContextMenuUngroup = () => {
+  // 检查是否有选中组合元素
+  const hasGroup = selection.selectedElementIds.value.some(id => {
+    const element = elements.value.find(el => el.id === id)
+    return element && element.type === 'group'
+  })
+  
+  if (hasGroup) {
+    grouping.ungroupElements()
+  }
+}
+
+// 重新排序组合内的元素
+const reorderElementInGroup = (groupId: string, fromIndex: number, toIndex: number) => {
+  // 递归查找并更新组合
+  const reorderInList = (list: CanvasElementType[]): CanvasElementType[] => {
+    return list.map(el => {
+      if (el.id === groupId && el.type === 'group') {
+        const group = el as GroupElement
+        const children = [...group.children]
+        
+        if (fromIndex < 0 || fromIndex >= children.length || 
+            toIndex < 0 || toIndex > children.length || 
+            fromIndex === toIndex) {
+          return el
+        }
+        
+        const child = children[fromIndex]
+        children.splice(fromIndex, 1)
+        children.splice(toIndex, 0, child)
+        
+        return {
+          ...group,
+          children
+        }
+      } else if (el.type === 'group') {
+        const group = el as GroupElement
+        return {
+          ...group,
+          children: reorderInList(group.children)
+        }
+      }
+      return el
+    })
+  }
+  
+  elements.value = reorderInList(elements.value)
+}
+
 // 暴露方法供父组件调用
 defineExpose({
   addShape: elementCreation.addShape,
   addImage: elementCreation.addImage,
   addText,
+  groupElements: grouping.groupElements,
+  ungroupElements: grouping.ungroupElements,
   handleImageSelected,
+  updateBrushColor,
+  updateBrushStrokeWidth,
+  reorderElement,
+  reorderElementInGroup,
   elements,
   selection
 })
@@ -538,6 +873,14 @@ onUnmounted(() => {
 }
 
 .canvas-container.tool-image.can-drag {
+  cursor: crosshair;
+}
+
+.canvas-container.tool-brush {
+  cursor: crosshair;
+}
+
+.canvas-container.tool-brush.can-drag {
   cursor: crosshair;
 }
 
