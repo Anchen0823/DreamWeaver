@@ -1,5 +1,5 @@
 # DreamWeaver (画布产品课程项目)
-A canvas app for ByteDance campus
+基于 Vue 3、TypeScript 与 DOM/CSS 的画布编辑器课程项目，支持图形、文本、图片、画笔、图层管理和 IndexedDB 本地保存。
 ## 1. 项目简介
 
 
@@ -19,18 +19,18 @@ A canvas app for ByteDance campus
 
 
 1.  **环境要求**:
-    * Node.js (建议 v18+)
-    * pnpm (或 npm / yarn)
+    * Node.js `^20.19.0 || >=22.12.0`（与 `app/package.json` 一致）
+    * npm（仓库提供 `app/package-lock.json`）
 
 2.  **克隆仓库**:
     ```bash
-    git clone [https://github.com/Anchen0823/DreamWeaver]
-    cd DreamWeaver
+    git clone https://github.com/Anchen0823/DreamWeaver.git
+    cd DreamWeaver/app
     ```
 
 3.  **安装依赖**:
     ```bash
-    npm install
+    npm ci
     ```
 
 4.  **启动本地开发环境**:
@@ -39,6 +39,17 @@ A canvas app for ByteDance campus
     ```
 
 5.  在浏览器中打开 `http://localhost:5173/` (或终端提示的地址)。
+
+以上 npm 命令均在 `app/` 下执行。Windows PowerShell 若限制 `npm.ps1`，可使用 `npm.cmd`。
+
+生产构建与预览：
+
+```bash
+npm run build
+npm run preview
+```
+
+构建产物位于 `app/dist/`。画布数据保存在当前浏览器的 IndexedDB 中，不提供账号云同步；清除站点数据会影响本地保存的内容。
 
 ## 3. 主要目录结构说明
 
@@ -307,3 +318,15 @@ DreamWeaver/
 * `npm run dev`: 启动本地开发服务器
 * `npm run build`: 构建生产环境代码
 * `npm run lint`: 运行代码规范检查
+
+`npm run build` 同时执行类型检查与 Vite 构建；`npm run type-check` 可单独检查类型。`npm run lint` 带有 `--fix`，会修改源码，执行后应检查差异。
+
+## 7. 文档导航
+
+- [项目文档](docs/PROJECT_DOCUMENTATION.md)
+- [数据结构](docs/DATA_STRUCTURE.md)
+- [右键菜单](docs/CONTEXT_MENU_GUIDE.md)
+- [浮动工具栏](docs/FLOATING_TOOLBAR_GUIDE.md)
+- [坐标与定位](docs/POSITIONING_GUIDE.md)
+
+上面的分周清单保留课程开发记录；计划项及性能目标不代表本次重新验证的结果。
